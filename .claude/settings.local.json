@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import numpy; print\\(numpy.__version__\\)\")",
+      "Bash(cp -r \"d:/TinyEngine/GestureRecognition/My_MCC_Config\" \"d:/TinyEngine/PersonDetection/\")",
+      "Bash(cp -r \"d:/TinyEngine/GestureRecognition/cmake\" \"d:/TinyEngine/PersonDetection/\")",
+      "Bash(cp -r d:/TinyEngine/tinysrc/codegen/Include/. d:/TinyEngine/PersonDetection/My_MCC_Config/src/TinyEngine/codegen/Include/)",
+      "Bash(cp -r d:/TinyEngine/tinysrc/codegen/Source/. d:/TinyEngine/PersonDetection/My_MCC_Config/src/TinyEngine/codegen/Source/)",
+      "Bash(cp -r d:/TinyEngine/tinysrc/TinyEngine/include/. d:/TinyEngine/PersonDetection/My_MCC_Config/src/TinyEngine/include/)",
+      "Bash(cp -r d:/TinyEngine/tinysrc/TinyEngine/src/kernels/int_forward_op d:/TinyEngine/PersonDetection/My_MCC_Config/src/TinyEngine/src/kernels/)",
+      "Bash(cp -r d:/TinyEngine/tinysrc/TinyEngine/src/kernels/fp_requantize_op d:/TinyEngine/PersonDetection/My_MCC_Config/src/TinyEngine/src/kernels/)",
+      "Bash(cmake -S cmake/ML_OV7670_GFX/default -B _build/ML_OV7670_GFX/default -G Ninja -DCMAKE_TOOLCHAIN_FILE=\"d:/TinyEngine/PersonDetection/cmake/ML_OV7670_GFX/default/.generated/toolchain.cmake\" -DPACK_REPO_PATH=C:/Users/I41645/.mchp_packs)",
+      "Bash(cmake --build _build/ML_OV7670_GFX/default)",
+      "Bash(cmake -B _build/ML_OV7670_GFX/default)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import torch; print\\('torch', torch.__version__\\)\")"
+    ]
+  }
+}

@@ -1,0 +1,2 @@
+# Hashes of file build rules.
+648203528a8cb5404f66065884e7aac8 CMakeFiles/ML_OV7670_GFX_default_Bin2Hex

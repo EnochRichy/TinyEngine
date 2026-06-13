@@ -1,0 +1,40 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/14d8877dbf752aa4508719afa142a07a/DAP/Firmware/Examples/MCU-LINK/RTE/Device/LPC55S69JBD64_cm33_core0/startup_LPC55S69_cm33_core0.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/CMSIS/DSP/Platforms/FVP/ARMCM0/Startup/GCC/startup_ARMCM0.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/CMSIS/DSP/Platforms/NORMALFVP/ARMv81MML/Startup/GCC/startup_asm_ARMv81MML.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/CMSIS/DSP/Source/TransformFunctions/arm_bitreversal2.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/CMSIS/RTOS/RTX/SRC/GCC/HAL_CM0.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/CMSIS/RTOS/RTX/SRC/GCC/HAL_CM3.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/CMSIS/RTOS/RTX/SRC/GCC/HAL_CM4.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/CMSIS/RTOS/RTX/SRC/GCC/SVC_Table.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/CMSIS/RTOS2/RTX/Source/GCC/irq_armv6m.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/CMSIS/RTOS2/RTX/Source/GCC/irq_armv7a.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/CMSIS/RTOS2/RTX/Source/GCC/irq_armv7m.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/CMSIS/RTOS2/RTX/Source/GCC/irq_armv8mbl.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/CMSIS/RTOS2/RTX/Source/GCC/irq_armv8mml.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMCM0/Source/GCC/startup_ARMCM0.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMCM0plus/Source/GCC/startup_ARMCM0plus.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMCM1/Source/GCC/startup_ARMCM1.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMCM23/Source/ARM/startup_ARMCM23.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMCM23/Source/GCC/startup_ARMCM23.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMCM3/Source/GCC/startup_ARMCM3.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMCM33/Source/ARM/startup_ARMCM33.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMCM33/Source/GCC/startup_ARMCM33.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMCM35P/Source/ARM/startup_ARMCM35P.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMCM35P/Source/GCC/startup_ARMCM35P.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMCM4/Source/GCC/startup_ARMCM4.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMCM7/Source/GCC/startup_ARMCM7.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMSC000/Source/GCC/startup_ARMSC000.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMSC300/Source/GCC/startup_ARMSC300.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMv8MBL/Source/ARM/startup_ARMv8MBL.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMv8MBL/Source/GCC/startup_ARMv8MBL.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMv8MML/Source/ARM/startup_ARMv8MML.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/ARM/ARMv8MML/Source/GCC/startup_ARMv8MML.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/_Template_Vendor/Vendor/Device/Source/ARM/startup_Device_ac6.S.o"
+  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/D_/TinyEngine/tinysrc/TinyEngine/third_party/CMSIS/Device/_Template_Vendor/Vendor/Device/Source/GCC/startup_Device.S.o"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang ASM)
+  include(CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

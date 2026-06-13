@@ -1,0 +1,9 @@
+D:/TinyEngine/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_default_XC32_assemble.dir
+D:/TinyEngine/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_default_XC32_assembleWithPreprocess.dir
+D:/TinyEngine/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir
+D:/TinyEngine/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile_cpp.dir
+D:/TinyEngine/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_image_DJ4_xTvD.dir
+D:/TinyEngine/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_Bin2Hex.dir
+D:/TinyEngine/_build/ML_OV7670_GFX/default/CMakeFiles/merge_loadable_files.dir
+D:/TinyEngine/_build/ML_OV7670_GFX/default/CMakeFiles/edit_cache.dir
+D:/TinyEngine/_build/ML_OV7670_GFX/default/CMakeFiles/rebuild_cache.dir
