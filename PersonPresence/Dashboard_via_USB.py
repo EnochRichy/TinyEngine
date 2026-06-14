@@ -58,8 +58,11 @@ MODEL_INFO = {
 }
 
 # ---- Display sizing ----
-VIDEO_W, VIDEO_H = 480, 360
-PANEL_W = 320
+# 320x240 = exact 2x of the 160x120 sensor frame. Integer scaling avoids the
+# cubic-interpolation softness that 3x (480x360) introduced and shrinks the
+# pixel-noise pattern that was visible at the larger size.
+VIDEO_W, VIDEO_H = 320, 240
+PANEL_W = 260
 WINDOW_TITLE = "PersonPresence inference dashboard"
 
 # ---------------------------------------------------------------------------
@@ -155,50 +158,66 @@ def render_panel(meta, stream_fps, inference_fps):
     person = meta["person"]
     badge_colour = COL_PERSON if person else COL_NOPERSON
     label = "PERSON" if person else "NO PERSON"
-    cv2.rectangle(panel, (10, 10), (PANEL_W - 10, 70), badge_colour, -1)
-    (tw, th), _ = cv2.getTextSize(label, FONT, 0.95, 2)
+    cv2.rectangle(panel, (8, 6), (PANEL_W - 8, 44), badge_colour, -1)
+    (tw, th), _ = cv2.getTextSize(label, FONT, 0.7, 2)
     draw_text(panel, label,
-              ((PANEL_W - tw) // 2, 10 + (60 + th) // 2),
-              scale=0.95, colour=(15, 15, 15), thickness=2)
+              ((PANEL_W - tw) // 2, 6 + (38 + th) // 2),
+              scale=0.7, colour=(15, 15, 15), thickness=2)
 
     margin = meta["margin"]
-    margin_str = f"margin {margin:+d}    logits p={meta['person_logit']:+d} np={meta['noperson_logit']:+d}"
-    draw_text(panel, margin_str, (12, 88), 0.42, COL_DIM)
+    margin_str = f"m {margin:+d}  p={meta['person_logit']:+d} np={meta['noperson_logit']:+d}"
+    draw_text(panel, margin_str, (10, 58), 0.38, COL_DIM)
 
     # ---- Live metrics ----
-    y = 116
-    draw_text(panel, "LIVE METRICS", (12, y), 0.45, COL_ACCENT, 1); y += 22
+    y = 78
+    draw_text(panel, "LIVE", (10, y), 0.4, COL_ACCENT, 1); y += 16
     inf_ms = meta["inference_us"] / 1000.0
     rows = [
-        ("Stream FPS",  f"{stream_fps:6.1f}"),
-        ("Inference",   f"{inf_ms:6.2f} ms"),
+        ("Stream FPS",    f"{stream_fps:6.1f}"),
+        ("Inference",     f"{inf_ms:6.2f} ms"),
         ("Inference FPS", f"{inference_fps:6.1f}" if inference_fps else "  ---  "),
-        ("Frame ID",    f"{meta['frame_id']}"),
+        ("Frame ID",      f"{meta['frame_id']}"),
     ]
-    for label, value in rows:
-        draw_text(panel, label,  (16, y), 0.45, COL_TEXT)
-        draw_text(panel, value,  (PANEL_W - 110, y), 0.45, COL_TEXT)
-        y += 20
+    for row_label, value in rows:
+        draw_text(panel, row_label, (12, y), 0.38, COL_TEXT)
+        draw_text(panel, value,     (PANEL_W - 90, y), 0.38, COL_TEXT)
+        y += 14
 
     # ---- Model info ----
-    y += 6
-    draw_text(panel, "MODEL", (12, y), 0.45, COL_ACCENT, 1); y += 22
-    for label, value in MODEL_INFO.items():
-        draw_text(panel, label, (16, y), 0.42, COL_DIM)
-        draw_text(panel, value, (PANEL_W - 180, y), 0.42, COL_TEXT)
-        y += 18
+    y += 4
+    draw_text(panel, "MODEL", (10, y), 0.4, COL_ACCENT, 1); y += 16
+    for info_label, value in MODEL_INFO.items():
+        draw_text(panel, info_label, (12, y), 0.36, COL_DIM)
+        draw_text(panel, value,      (PANEL_W - 145, y), 0.36, COL_TEXT)
+        y += 13
 
     return panel
 
 
+def enhance_video(video_bgr):
+    """Denoise and mildly sharpen the raw 160x120 BGR frame before upscaling.
+
+    Bilateral filter removes the speckle noise that's visible as colored
+    flecks across flat areas while preserving edges (a Gaussian blur would
+    soften the subject). The unsharp mask afterwards puts a small amount of
+    edge contrast back so the upscaled image doesn't look mushy.
+    """
+    denoised = cv2.bilateralFilter(video_bgr, d=5, sigmaColor=40, sigmaSpace=7)
+    blur = cv2.GaussianBlur(denoised, (0, 0), sigmaX=1.0)
+    sharp = cv2.addWeighted(denoised, 1.4, blur, -0.4, 0)
+    return sharp
+
+
 def compose_dashboard(video_bgr, panel):
     canvas = np.full((VIDEO_H, VIDEO_W + PANEL_W, 3), COL_BG, dtype=np.uint8)
+    enhanced = enhance_video(video_bgr)
+    # INTER_LANCZOS4 + integer 2x upscale gives the cleanest result for a
+    # 160x120 source — no half-pixel resampling, sharper edges than CUBIC.
     canvas[:, :VIDEO_W] = cv2.resize(
-        video_bgr, (VIDEO_W, VIDEO_H), interpolation=cv2.INTER_CUBIC
+        enhanced, (VIDEO_W, VIDEO_H), interpolation=cv2.INTER_LANCZOS4
     )
     canvas[:, VIDEO_W:] = panel
 
-    # decision border around video
     return canvas
 
 

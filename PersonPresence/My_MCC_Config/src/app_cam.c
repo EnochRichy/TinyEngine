@@ -233,6 +233,15 @@ void ov7670_init(void)
                                  * outside one lighting level. With AGC on, the
                                  * sensor overrides the manual gain register. */
 
+  /* AGC ceiling and AEC target. Without these, AGC ceiling defaults high (8x)
+   * and the AEC target is set bright — once the color matrix was corrected
+   * to pass full red, the combined gain blew highlights out completely. */
+  I2C_Write(0x14, 0x18);        /* COM9: AGC ceiling = 2x (was default ~8x).
+                                 * Bits[6:4] = 001 -> 2x ceiling. */
+  I2C_Write(0x24, 0x70);        /* AEW: AEC upper window  (was Linux 0x95) */
+  I2C_Write(0x25, 0x60);        /* AEB: AEC lower window  (was Linux 0x33) */
+  I2C_Write(0x26, 0xA5);        /* VPT: fast-mode region  (was Linux 0xE3) */
+
   I2C_Write(0x8C, 0x00);        /* RGB444: Disabled (use RGB565) */
 
   I2C_Write(0x3A, 0x08);        /* TSLB: Correct RGB byte order */
@@ -266,11 +275,75 @@ void ov7670_init(void)
   I2C_Write(0x1A, 0x7A);        /* VSTOP: Vertical window stop */
   I2C_Write(0x03, 0x0A);        /* VREF: Vertical reference */
 
-  /* Color matrix (critical for correct color reproduction) */
-  I2C_Write(0x4F, 0x83);        /* MTX1: Color matrix coefficient */
-  I2C_Write(0x50, 0x30);        /* MTX2: Color matrix coefficient */
-  I2C_Write(0x51, 0x83);        /* MTX3: Color matrix coefficient */
-  I2C_Write(0xB0, 0x0F);        /* UNDOCUMENTED: Camera board color correction */
+  /* Color matrix — full 6-coefficient set + sign register (Linux ov7670 driver
+   * values). Previous init wrote only MTX1..MTX3 and skipped MTX4..MTX6 / MTXS,
+   * which left the YUV->RGB basis incomplete and produced a strong cyan cast
+   * (red channel suppressed). MTXS at 0x58 carries the per-coefficient signs
+   * and is mandatory. */
+  I2C_Write(0x4F, 0x80);        /* MTX1 */
+  I2C_Write(0x50, 0x80);        /* MTX2 */
+  I2C_Write(0x51, 0x00);        /* MTX3 */
+  I2C_Write(0x52, 0x22);        /* MTX4 */
+  I2C_Write(0x53, 0x5E);        /* MTX5 */
+  I2C_Write(0x54, 0x80);        /* MTX6 */
+  I2C_Write(0x58, 0x9E);        /* MTXS: matrix coefficient signs */
+
+  /* Gamma curve (16-point, Linux driver values). Without this the sensor uses
+   * a near-linear default that crushes shadows and blooms highlights — visible
+   * as the over-bright wash on flat surfaces. */
+  I2C_Write(0x7A, 0x20);        /* SLOP */
+  I2C_Write(0x7B, 0x10);        /* GAM1 */
+  I2C_Write(0x7C, 0x1E);        /* GAM2 */
+  I2C_Write(0x7D, 0x35);        /* GAM3 */
+  I2C_Write(0x7E, 0x5A);        /* GAM4 */
+  I2C_Write(0x7F, 0x69);        /* GAM5 */
+  I2C_Write(0x80, 0x76);        /* GAM6 */
+  I2C_Write(0x81, 0x80);        /* GAM7 */
+  I2C_Write(0x82, 0x88);        /* GAM8 */
+  I2C_Write(0x83, 0x8F);        /* GAM9 */
+  I2C_Write(0x84, 0x96);        /* GAM10 */
+  I2C_Write(0x85, 0xA3);        /* GAM11 */
+  I2C_Write(0x86, 0xAF);        /* GAM12 */
+  I2C_Write(0x87, 0xC4);        /* GAM13 */
+  I2C_Write(0x88, 0xD7);        /* GAM14 */
+  I2C_Write(0x89, 0xE8);        /* GAM15 */
+
+  /* AWB seed gains. Power-on defaults at regs 0x01/0x02 bias toward blue,
+   * which is what AWB then "locks in" if pointed at a flat scene with no
+   * neutral reference (e.g. a uniform ceiling). Seeding with neutral values
+   * gives AWB a sane starting point. */
+  I2C_Write(0x01, 0x40);        /* BLUE gain */
+  I2C_Write(0x02, 0x60);        /* RED gain */
+
+  /* AWB advanced configuration (Linux driver values) */
+  I2C_Write(0x43, 0x0A);
+  I2C_Write(0x44, 0xF0);
+  I2C_Write(0x45, 0x34);
+  I2C_Write(0x46, 0x58);
+  I2C_Write(0x47, 0x28);
+  I2C_Write(0x48, 0x3A);
+  I2C_Write(0x59, 0x88);
+  I2C_Write(0x5A, 0x88);
+  I2C_Write(0x5B, 0x44);
+  I2C_Write(0x5C, 0x67);
+  I2C_Write(0x5D, 0x49);
+  I2C_Write(0x5E, 0x0E);
+  I2C_Write(0x6C, 0x0A);
+  I2C_Write(0x6D, 0x55);
+  I2C_Write(0x6E, 0x11);
+  I2C_Write(0x6F, 0x9F);        /* "9e for advance AWB" per datasheet */
+  I2C_Write(0x6A, 0x40);        /* GGAIN */
+  I2C_Write(0x01, 0x40);        /* BLUE gain (re-seed after AWB regs) */
+  I2C_Write(0x02, 0x60);        /* RED gain (re-seed) */
+
+  /* Saturation / brightness / contrast (mid-point defaults) */
+  I2C_Write(0x55, 0x00);        /* BRIGHT */
+  I2C_Write(0x56, 0x40);        /* CNST */
+
+  I2C_Write(0xB0, 0x84);        /* "Magic" undocumented register — fixes
+                                 * red-channel suppression on virtually every
+                                 * OV7670 module. Was 0x0F, which is the main
+                                 * driver of the cyan cast we were seeing. */
 
   /* Wait for settling (50ms) */
   SYS_TIME_HANDLE delayHandle;

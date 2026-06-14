@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PersonPresence — TinyEngine on PIC32CZ-CA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0f1c; --bg-2:#0f1626; --panel:#121a2c; --panel-2:#172238;
+    --line:#1f2c47; --line-2:#2a3a5c;
+    --fg:#e6ecf5; --fg-dim:#9aa8c2; --fg-mute:#6b7894;
+    --acc:#22d3ee; --acc-2:#7ee8fa; --amber:#fbbf24; --green:#34d399; --red:#f87171;
+    --kw:#c084fc; --str:#a7f3d0; --num:#fbbf24; --com:#6b7894;
+    --radius:12px; --radius-sm:8px;
+    --mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,Segoe UI,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:var(--sans); color:var(--fg); background:var(--bg);
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(34,211,238,0.10), transparent 60%),
+      radial-gradient(ellipse 800px 400px at 90% 20%, rgba(124,58,237,0.08), transparent 60%);
+    background-attachment:fixed;
+  }
+  a{color:var(--acc); text-decoration:none}
+  a:hover{color:var(--acc-2); text-decoration:underline}
+  code,pre{font-family:var(--mono); font-size:13px}
+  pre{margin:0; overflow-x:auto}
+
+  /* Nav */
+  nav.top{
+    position:sticky; top:0; z-index:50;
+    background:rgba(10,15,28,0.85); backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  nav.top .inner{
+    max-width:1240px; margin:0 auto; padding:14px 24px;
+    display:flex; align-items:center; gap:24px; flex-wrap:wrap;
+  }
+  nav.top .brand{font-weight:700; font-size:15px; letter-spacing:0.3px; display:flex; align-items:center; gap:10px}
+  nav.top .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--acc); box-shadow:0 0 12px var(--acc)}
+  nav.top ul{display:flex; gap:4px; list-style:none; padding:0; margin:0; flex-wrap:wrap}
+  nav.top li a{
+    color:var(--fg-dim); padding:6px 10px; border-radius:6px;
+    font-size:13px; font-weight:500; transition:all .15s;
+  }
+  nav.top li a:hover{color:var(--fg); background:var(--panel); text-decoration:none}
+  nav.top li a.active{color:var(--acc); background:rgba(34,211,238,0.10)}
+
+  /* Layout */
+  main{max-width:1240px; margin:0 auto; padding:0 24px}
+  section{padding:72px 0 24px; scroll-margin-top:80px}
+  section .head{display:flex; align-items:baseline; gap:14px; margin-bottom:8px}
+  section .num{
+    font-family:var(--mono); font-size:13px; color:var(--acc);
+    border:1px solid var(--line-2); padding:2px 8px; border-radius:6px;
+    background:rgba(34,211,238,0.06);
+  }
+  section h2{
+    font-size:30px; margin:0; font-weight:700; letter-spacing:-0.4px;
+  }
+  section h2::after{
+    content:""; display:block; width:64px; height:2px; margin-top:12px;
+    background:linear-gradient(90deg, var(--acc), transparent);
+  }
+  section .sub{color:var(--fg-dim); font-size:15px; margin:8px 0 28px; max-width:780px}
+
+  /* Hero */
+  .hero{
+    padding:96px 0 56px; position:relative; overflow:hidden;
+  }
+  .hero .grid-bg{
+    position:absolute; inset:0; pointer-events:none; opacity:0.4;
+    background-image:
+      linear-gradient(rgba(34,211,238,0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34,211,238,0.06) 1px, transparent 1px);
+    background-size:40px 40px;
+    mask-image:radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 75%);
+  }
+  .hero .tag{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--mono); font-size:12px; color:var(--acc);
+    border:1px solid var(--line-2); border-radius:99px;
+    padding:6px 14px; background:rgba(34,211,238,0.06);
+  }
+  .hero .tag .pulse{width:6px;height:6px;border-radius:50%;background:var(--green); box-shadow:0 0 10px var(--green); animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+  .hero h1{
+    font-size:56px; font-weight:700; line-height:1.05; letter-spacing:-1.5px;
+    margin:20px 0 16px;
+    background:linear-gradient(180deg, #fff 0%, #b8c6e0 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .hero h1 .accent{
+    background:linear-gradient(90deg, var(--acc) 0%, var(--acc-2) 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .hero p.lede{color:var(--fg-dim); font-size:18px; max-width:720px; margin:0 0 36px}
+
+  .stats{
+    display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-top:8px;
+  }
+  .stat{
+    background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px 18px 16px; position:relative; overflow:hidden;
+  }
+  .stat::before{
+    content:""; position:absolute; top:0; left:0; right:0; height:1px;
+    background:linear-gradient(90deg, transparent, var(--acc), transparent);
+    opacity:0.5;
+  }
+  .stat .k{font-size:11px; color:var(--fg-mute); text-transform:uppercase; letter-spacing:1px; font-weight:600}
+  .stat .v{font-size:24px; font-weight:700; font-family:var(--mono); margin-top:6px; color:var(--fg)}
+  .stat .v .unit{font-size:13px; color:var(--fg-dim); margin-left:4px; font-weight:500}
+
+  /* Cards */
+  .card{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius); padding:22px;
+    transition:border-color .2s, transform .2s;
+  }
+  .card:hover{border-color:var(--line-2); transform:translateY(-1px)}
+  .card h3{margin:0 0 8px; font-size:16px; font-weight:600}
+  .card p{margin:0; color:var(--fg-dim); font-size:14px}
+  .grid{display:grid; gap:16px}
+  .grid-2{grid-template-columns:repeat(2, 1fr)}
+  .grid-3{grid-template-columns:repeat(3, 1fr)}
+  .grid-4{grid-template-columns:repeat(4, 1fr)}
+
+  /* Tables */
+  table.cmp{
+    width:100%; border-collapse:separate; border-spacing:0;
+    font-size:14px; margin-top:8px;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    overflow:hidden;
+  }
+  table.cmp th, table.cmp td{padding:12px 14px; text-align:left; border-bottom:1px solid var(--line)}
+  table.cmp th{background:var(--panel-2); font-weight:600; font-size:12px; color:var(--fg-dim); text-transform:uppercase; letter-spacing:0.5px}
+  table.cmp tr:last-child td{border-bottom:none}
+  table.cmp td.win{color:var(--green); font-weight:600}
+  table.cmp td.num{font-family:var(--mono)}
+  table.cmp tr.te td{background:rgba(34,211,238,0.04)}
+
+  /* Code */
+  pre.code{
+    background:#070b14; border:1px solid var(--line); border-radius:var(--radius-sm);
+    padding:16px 18px; font-size:12.5px; line-height:1.6;
+  }
+  .kw{color:var(--kw); font-weight:500}
+  .str{color:var(--str)}
+  .num{color:var(--num)}
+  .com{color:var(--com); font-style:italic}
+  .fn{color:var(--acc-2)}
+  .hl{background:rgba(251,191,36,0.10); border-left:2px solid var(--amber); padding-left:6px; margin-left:-8px}
+
+  details{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:0; margin-top:16px;
+  }
+  details summary{
+    padding:14px 18px; cursor:pointer; font-weight:500; font-size:14px;
+    list-style:none; display:flex; align-items:center; gap:10px;
+  }
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{
+    content:"▶"; color:var(--acc); font-size:10px; transition:transform .2s;
+  }
+  details[open] summary::before{transform:rotate(90deg)}
+  details .body{padding:0 18px 18px; border-top:1px solid var(--line)}
+
+  /* Pipeline diagram blocks */
+  .pipe-block{cursor:default}
+  .pipe-block rect{transition:fill .2s, stroke .2s}
+  .pipe-block:hover rect{fill:#1c2942; stroke:var(--acc)}
+  .pipe-block .tip{
+    opacity:0; transition:opacity .15s; pointer-events:none;
+  }
+  .pipe-block:hover .tip{opacity:1}
+
+  /* Footer */
+  footer{
+    margin-top:80px; padding:32px 0; border-top:1px solid var(--line);
+    color:var(--fg-mute); font-size:13px; text-align:center;
+  }
+
+  /* Responsive */
+  @media (max-width:1024px){
+    .hero h1{font-size:42px}
+    .stats{grid-template-columns:repeat(3,1fr)}
+    .grid-4{grid-template-columns:repeat(2,1fr)}
+  }
+  @media (max-width:720px){
+    section{padding:48px 0 16px}
+    .hero h1{font-size:32px}
+    .hero p.lede{font-size:15px}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
+    nav.top ul{gap:0}
+    nav.top li a{padding:6px 8px; font-size:12px}
+  }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="inner">
+    <div class="brand"><span class="dot"></span>PersonPresence · MCUNet-VWW0</div>
+    <ul>
+      <li><a href="#stack">Stack</a></li>
+      <li><a href="#tinyengine">TinyEngine</a></li>
+      <li><a href="#opt">Optimizations</a></li>
+      <li><a href="#model">Model</a></li>
+      <li><a href="#codegen">Codegen</a></li>
+      <li><a href="#memory">Memory</a></li>
+      <li><a href="#mcu">MCU flow</a></li>
+      <li><a href="#verify">Verify</a></li>
+      <li><a href="#results">Results</a></li>
+      <li><a href="#files">Files</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main>
+
+<section class="hero" id="top">
+  <div class="grid-bg"></div>
+  <div class="tag"><span class="pulse"></span>Working end-to-end · 2026-06-13</div>
+  <h1>A 2-class visual-wake-words classifier<br>running on a <span class="accent">PIC32CZ-CA</span> in &lt;70 ms.</h1>
+  <p class="lede">
+    MCUNet-VWW0 + TinyEngine on a Microchip PIC32CZ-CA MCU with an OV7670 camera.
+    64×64×3 int8 input · 51 layers · 60.8 KB peak SRAM · 399 KB flash weights.
+    Live USB CDC dashboard streams frames + decisions to a Python viewer at 15 FPS.
+  </p>
+  <div class="stats">
+    <div class="stat"><div class="k">Input</div><div class="v">64×64×3<span class="unit">int8 HWC</span></div></div>
+    <div class="stat"><div class="k">Peak SRAM</div><div class="v">60.8<span class="unit">KB activations</span></div></div>
+    <div class="stat"><div class="k">Flash</div><div class="v">399.7<span class="unit">KB weights</span></div></div>
+    <div class="stat"><div class="k">Inference</div><div class="v">&lt;70<span class="unit">ms</span></div></div>
+    <div class="stat"><div class="k">Stream</div><div class="v">15<span class="unit">FPS USB</span></div></div>
+  </div>
+</section>
+
+<section id="stack">
+  <div class="head"><span class="num">01</span><h2>The stack at a glance</h2></div>
+  <p class="sub">A single per-frame pipeline. Hover any block for details. Numbers below each block are the on-chip data size at that stage.</p>
+
+  <div style="background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:24px; overflow-x:auto">
+  <svg viewBox="0 0 1180 240" width="100%" style="min-width:980px; display:block" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="#22d3ee"/>
+      </marker>
+      <linearGradient id="te" x1="0" x2="1" y1="0" y2="0">
+        <stop offset="0" stop-color="#22d3ee" stop-opacity="0.15"/>
+        <stop offset="1" stop-color="#7c3aed" stop-opacity="0.15"/>
+      </linearGradient>
+    </defs>
+
+    <!-- 7 blocks across with arrows. y=70..150 -->
+    <!-- Block: OV7670 -->
+    <g class="pipe-block" transform="translate(0,70)">
+      <rect width="140" height="80" rx="10" fill="#172238" stroke="#2a3a5c" stroke-width="1.5"/>
+      <text x="70" y="34" text-anchor="middle" fill="#e6ecf5" font-family="Inter" font-size="14" font-weight="600">OV7670</text>
+      <text x="70" y="54" text-anchor="middle" fill="#9aa8c2" font-family="Inter" font-size="11">Camera · 160×120 RGB565</text>
+      <text x="70" y="100" text-anchor="middle" fill="#6b7894" font-family="JetBrains Mono" font-size="10">38 400 B</text>
+      <g class="tip"><rect x="-10" y="-34" width="160" height="28" rx="6" fill="#070b14" stroke="#2a3a5c"/><text x="70" y="-15" text-anchor="middle" fill="#e6ecf5" font-size="11" font-family="Inter">QQVGA RGB565 over parallel bus</text></g>
+    </g>
+    <line x1="140" y1="110" x2="170" y2="110" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- DMA -->
+    <g class="pipe-block" transform="translate(170,70)">
+      <rect width="120" height="80" rx="10" fill="#172238" stroke="#2a3a5c" stroke-width="1.5"/>
+      <text x="60" y="34" text-anchor="middle" fill="#e6ecf5" font-size="14" font-weight="600" font-family="Inter">DMA</text>
+      <text x="60" y="54" text-anchor="middle" fill="#9aa8c2" font-size="11" font-family="Inter">PCC → SRAM</text>
+      <text x="60" y="100" text-anchor="middle" fill="#6b7894" font-family="JetBrains Mono" font-size="10">VSYNC ISR</text>
+      <g class="tip"><rect x="-10" y="-34" width="140" height="28" rx="6" fill="#070b14" stroke="#2a3a5c"/><text x="60" y="-15" text-anchor="middle" fill="#e6ecf5" font-size="11" font-family="Inter">CPU-free frame transfer</text></g>
+    </g>
+    <line x1="290" y1="110" x2="320" y2="110" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- Preprocess -->
+    <g class="pipe-block" transform="translate(320,70)">
+      <rect width="160" height="80" rx="10" fill="#172238" stroke="#2a3a5c" stroke-width="1.5"/>
+      <text x="80" y="34" text-anchor="middle" fill="#e6ecf5" font-size="14" font-weight="600" font-family="Inter">Preprocess</text>
+      <text x="80" y="54" text-anchor="middle" fill="#9aa8c2" font-size="11" font-family="Inter">Crop + bilinear + int8</text>
+      <text x="80" y="100" text-anchor="middle" fill="#6b7894" font-family="JetBrains Mono" font-size="10">12 288 B</text>
+      <g class="tip"><rect x="-10" y="-34" width="180" height="28" rx="6" fill="#070b14" stroke="#2a3a5c"/><text x="80" y="-15" text-anchor="middle" fill="#e6ecf5" font-size="11" font-family="Inter">160×120 → 120² → 64×64×3</text></g>
+    </g>
+    <line x1="480" y1="110" x2="510" y2="110" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- TinyEngine -->
+    <g class="pipe-block" transform="translate(510,55)">
+      <rect width="180" height="110" rx="10" fill="url(#te)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="90" y="36" text-anchor="middle" fill="#22d3ee" font-size="14" font-weight="700" font-family="Inter">TinyEngine</text>
+      <text x="90" y="56" text-anchor="middle" fill="#e6ecf5" font-size="11" font-family="Inter">MCUNet-VWW0 · 51 layers</text>
+      <text x="90" y="76" text-anchor="middle" fill="#9aa8c2" font-size="11" font-family="Inter">invoke(NULL)</text>
+      <text x="90" y="92" text-anchor="middle" fill="#9aa8c2" font-size="11" font-family="Inter">&lt;70 ms</text>
+      <text x="90" y="130" text-anchor="middle" fill="#6b7894" font-family="JetBrains Mono" font-size="10">60 800 B arena</text>
+      <g class="tip"><rect x="-10" y="-34" width="200" height="28" rx="6" fill="#070b14" stroke="#22d3ee"/><text x="90" y="-15" text-anchor="middle" fill="#22d3ee" font-size="11" font-family="Inter">Static memory plan · no malloc</text></g>
+    </g>
+    <line x1="690" y1="110" x2="720" y2="110" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- Logits -->
+    <g class="pipe-block" transform="translate(720,70)">
+      <rect width="120" height="80" rx="10" fill="#172238" stroke="#2a3a5c" stroke-width="1.5"/>
+      <text x="60" y="34" text-anchor="middle" fill="#e6ecf5" font-size="14" font-weight="600" font-family="Inter">Logits</text>
+      <text x="60" y="54" text-anchor="middle" fill="#9aa8c2" font-size="11" font-family="Inter">2× int8</text>
+      <text x="60" y="100" text-anchor="middle" fill="#6b7894" font-family="JetBrains Mono" font-size="10">[no-p, p]</text>
+      <g class="tip"><rect x="-10" y="-34" width="140" height="28" rx="6" fill="#070b14" stroke="#2a3a5c"/><text x="60" y="-15" text-anchor="middle" fill="#e6ecf5" font-size="11" font-family="Inter">scale=0.09819 · zp=0</text></g>
+    </g>
+    <line x1="840" y1="110" x2="870" y2="110" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- EMA / hysteresis -->
+    <g class="pipe-block" transform="translate(870,70)">
+      <rect width="160" height="80" rx="10" fill="#172238" stroke="#2a3a5c" stroke-width="1.5"/>
+      <text x="80" y="34" text-anchor="middle" fill="#e6ecf5" font-size="14" font-weight="600" font-family="Inter">EMA + hysteresis</text>
+      <text x="80" y="54" text-anchor="middle" fill="#9aa8c2" font-size="11" font-family="Inter">α=¼ · enter +4 / exit −8</text>
+      <text x="80" y="100" text-anchor="middle" fill="#6b7894" font-family="JetBrains Mono" font-size="10">smoothed margin</text>
+      <g class="tip"><rect x="-10" y="-34" width="180" height="28" rx="6" fill="#070b14" stroke="#2a3a5c"/><text x="80" y="-15" text-anchor="middle" fill="#e6ecf5" font-size="11" font-family="Inter">Asymmetric: sticky on-state</text></g>
+    </g>
+    <line x1="1030" y1="110" x2="1060" y2="110" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- USB -->
+    <g class="pipe-block" transform="translate(1060,70)">
+      <rect width="120" height="80" rx="10" fill="#172238" stroke="#2a3a5c" stroke-width="1.5"/>
+      <text x="60" y="34" text-anchor="middle" fill="#e6ecf5" font-size="14" font-weight="600" font-family="Inter">USB CDC</text>
+      <text x="60" y="54" text-anchor="middle" fill="#9aa8c2" font-size="11" font-family="Inter">16 B hdr + frame</text>
+      <text x="60" y="100" text-anchor="middle" fill="#6b7894" font-family="JetBrains Mono" font-size="10">Python dashboard</text>
+      <g class="tip"><rect x="-10" y="-34" width="140" height="28" rx="6" fill="#070b14" stroke="#2a3a5c"/><text x="60" y="-15" text-anchor="middle" fill="#e6ecf5" font-size="11" font-family="Inter">15 FPS live view</text></g>
+    </g>
+  </svg>
+  </div>
+</section>
+
+<section id="tinyengine">
+  <div class="head"><span class="num">02</span><h2>What is TinyEngine?</h2></div>
+  <p class="sub">A memory-efficient inference library from MIT Han Lab, co-designed with the MCUNet neural-architecture search. It schedules memory by overall network topology — not layer-by-layer — and emits flat C source instead of running an interpreter.</p>
+
+  <div class="grid grid-3">
+    <div class="card">
+      <h3>Co-designed with MCUNet</h3>
+      <p>TinyNAS searches an efficient architecture; TinyEngine compiles it to MCU-class C. Joint optimization beats either piece alone.</p>
+    </div>
+    <div class="card">
+      <h3>Static memory plan</h3>
+      <p>No malloc, no runtime planner, no interpreter. The codegen emits one buffer, one schedule, one straight-line <code>invoke()</code>.</p>
+    </div>
+    <div class="card">
+      <h3>Source-level codegen</h3>
+      <p>Generates plain C kernels with the model already specialized — channel counts, kernel sizes, strides, scales are all compile-time constants.</p>
+    </div>
+  </div>
+
+  <p class="sub" style="margin-top:32px">Profiled on STM32H743 against TFLite-Micro, CMSIS-NN, and X-CUBE-AI for the same MCUNet-VWW0 net (numbers from the upstream <a href="https://github.com/mit-han-lab/tinyengine" target="_blank">TinyEngine README</a>):</p>
+
+  <table class="cmp">
+    <thead>
+      <tr>
+        <th>Metric (mcunet-vww0)</th>
+        <th>TFLite-Micro</th>
+        <th>CMSIS-NN</th>
+        <th>X-CUBE-AI v7.3</th>
+        <th>TinyEngine</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Latency</td>
+        <td class="num">587 ms</td>
+        <td class="num">53 ms</td>
+        <td class="num">32 ms</td>
+        <td class="num win">27 ms</td>
+      </tr>
+      <tr>
+        <td>Peak SRAM</td>
+        <td class="num">163 kB</td>
+        <td class="num">163 kB</td>
+        <td class="num">88 kB</td>
+        <td class="num win">59 kB</td>
+      </tr>
+      <tr>
+        <td>Flash weights</td>
+        <td class="num">627 kB</td>
+        <td class="num">646 kB</td>
+        <td class="num">463 kB</td>
+        <td class="num win">453 kB</td>
+      </tr>
+      <tr class="te">
+        <td colspan="5" style="font-size:13px; color:var(--fg-dim)">Across the MCUNet model family: <b style="color:var(--fg)">1.1×–18.6×</b> faster and <b style="color:var(--fg)">1.3×–3.6×</b> lower peak memory than the next-best.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="opt">
+  <div class="head"><span class="num">03</span><h2>Optimization techniques</h2></div>
+  <p class="sub">The seven tricks that let TinyEngine run a 51-layer MobileNetV2-style net in 60 KB of SRAM. All are baked into the generated kernels — there's no runtime cost to "enable" them.</p>
+
+  <div class="grid grid-4">
+    <div class="card">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="3" y="3" width="26" height="26" rx="3" stroke="#22d3ee" stroke-width="1.5"/><path d="M10 10 L22 22 M22 10 L10 22" stroke="#22d3ee" stroke-width="1.5" opacity="0.5"/></svg>
+      <h3>In-place depthwise conv</h3>
+      <p>Depthwise reads and writes the same channel — overlap input/output buffers and save the activation memory entirely.</p>
+    </div>
+    <div class="card">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="3" y="3" width="11" height="11" rx="2" stroke="#22d3ee" stroke-width="1.5"/><rect x="18" y="3" width="11" height="11" rx="2" stroke="#22d3ee" stroke-width="1.5" opacity="0.6"/><rect x="3" y="18" width="11" height="11" rx="2" stroke="#22d3ee" stroke-width="1.5" opacity="0.6"/><rect x="18" y="18" width="11" height="11" rx="2" stroke="#22d3ee" stroke-width="1.5" opacity="0.3"/></svg>
+      <h3>Patch-based inference</h3>
+      <p>For early layers (memory-bottleneck stage), process spatial patches with overlap rather than the full feature map. Up to 8× peak-memory drop on MobileNetV2.</p>
+    </div>
+    <div class="card">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="10" cy="10" r="4" stroke="#22d3ee" stroke-width="1.5"/><circle cx="22" cy="22" r="4" stroke="#22d3ee" stroke-width="1.5"/><path d="M14 10 H22 V18" stroke="#22d3ee" stroke-width="1.5" fill="none"/></svg>
+      <h3>Operator fusion</h3>
+      <p>Conv + bias + ReLU + requantize collapse into one kernel — single pass over the data, no intermediate tensor written to memory.</p>
+    </div>
+    <div class="card">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="4" y="4" width="8" height="24" stroke="#22d3ee" stroke-width="1.5"/><path d="M14 8 L28 8 M14 14 L28 14 M14 20 L28 20 M14 26 L28 26" stroke="#22d3ee" stroke-width="1.5"/></svg>
+      <h3>Im2col GEMM</h3>
+      <p>Convolution lowered to a matrix multiply against a column-formatted patch buffer. Maps cleanly to the SIMD MAC pipeline.</p>
+    </div>
+    <div class="card">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M4 8 H28 M4 16 H28 M4 24 H28" stroke="#22d3ee" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="#22d3ee"/><circle cx="14" cy="8" r="2" fill="#22d3ee"/><circle cx="20" cy="8" r="2" fill="#22d3ee"/><circle cx="26" cy="8" r="2" fill="#22d3ee"/></svg>
+      <h3>SIMD packing</h3>
+      <p>Four int8 multiply-accumulates per cycle on Cortex-M with DSP extensions. Weights are reordered at codegen time to match.</p>
+    </div>
+    <div class="card">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M4 4 V28 H28" stroke="#22d3ee" stroke-width="1.5"/><path d="M8 24 L14 18 L20 22 L26 12" stroke="#22d3ee" stroke-width="1.5" fill="none"/></svg>
+      <h3>HWC → CHW transform</h3>
+      <p>Weights are laid out in CHW for in-place depthwise so each channel's read/write region is contiguous — better cache behaviour.</p>
+    </div>
+    <div class="card">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M6 6 L26 6 L26 26 L6 26 Z" stroke="#22d3ee" stroke-width="1.5"/><path d="M6 12 L26 12 M6 18 L26 18 M6 24 L26 24" stroke="#22d3ee" stroke-width="1" opacity="0.5"/></svg>
+      <h3>Loop reorder / unroll / tile</h3>
+      <p>Per-kernel loop nest is hand-tuned at codegen time for the specific (kH, kW, stride, channels) tuple — 18 depthwise variants emitted for VWW0 alone.</p>
+    </div>
+    <div class="card">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="4" y="14" width="24" height="6" rx="1" stroke="#22d3ee" stroke-width="1.5"/><rect x="6" y="14" width="6" height="6" fill="#22d3ee" opacity="0.6"/><rect x="14" y="14" width="6" height="6" fill="#22d3ee" opacity="0.4"/><rect x="22" y="14" width="4" height="6" fill="#22d3ee" opacity="0.2"/></svg>
+      <h3>One static arena</h3>
+      <p>All activations share a single <code>buffer0[]</code> with offsets chosen at codegen time. Live ranges of tensors are packed; no dynamic allocator is linked.</p>
+    </div>
+  </div>
+</section>
+
+<section id="model">
+  <div class="head"><span class="num">04</span><h2>The MCUNet-VWW0 model</h2></div>
+  <p class="sub">Net id <code>mcunet-10fps_vww</code> from the MCUNet zoo. A 2-class person/no-person classifier — the smallest of the three VWW variants, designed for ~10 FPS on a Cortex-M7.</p>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>Tensor shapes</h3>
+      <pre class="code" style="margin-top:10px"><span class="com">/* read from .tflite, not derived */</span>
+input  : <span class="num">[1, 64, 64, 3]</span>  <span class="com">// HWC int8</span>
+output : <span class="num">[1, 2]</span>          <span class="com">// [no-person, person]</span>
+layers : <span class="num">51</span>
+weights: <span class="num">399 656</span> <span class="com">B (flash)</span>
+arena  : <span class="num">60 800</span>  <span class="com">B (SRAM)</span></pre>
+    </div>
+    <div class="card">
+      <h3>Quantization params</h3>
+      <pre class="code" style="margin-top:10px"><span class="com">/* input — pixels normalized to ~[-1,1] */</span>
+scale = <span class="num">0.00784314</span>
+zp    = <span class="num">-1</span>
+
+<span class="com">/* output — real logit = q × scale */</span>
+scale = <span class="num">0.09819</span>
+zp    = <span class="num">0</span>
+<span class="com">// margin 35 → 3.44 → ~97% softmax</span></pre>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>Layer stack — 64×64×3 collapses through 51 layers down to 1×1×2</h3>
+    <p style="margin-bottom:14px">Spatial dim shrinks (stride-2 depthwise every few blocks); channel count grows then collapses through global-avg-pool to the 2-logit classifier head.</p>
+    <svg viewBox="0 0 1100 110" width="100%" style="display:block; max-width:100%">
+      <!-- Roughly 11 stages: 64,32,32,32,16,16,8,8,4,4,2,1 spatial; channels 3→16→24→40→48→80→96→160→320→480→2 -->
+      <g font-family="JetBrains Mono" font-size="9" fill="#9aa8c2">
+        <rect x="0"   y="20" width="64" height="64" fill="#22d3ee" opacity="0.85" rx="2"/><text x="32"  y="100" text-anchor="middle">64²·3</text>
+        <rect x="80"  y="36" width="48" height="48" fill="#22d3ee" opacity="0.75" rx="2"/><text x="104" y="100" text-anchor="middle">32²·16</text>
+        <rect x="144" y="36" width="48" height="48" fill="#22d3ee" opacity="0.70" rx="2"/><text x="168" y="100" text-anchor="middle">32²·24</text>
+        <rect x="208" y="44" width="40" height="40" fill="#22d3ee" opacity="0.65" rx="2"/><text x="228" y="100" text-anchor="middle">16²·40</text>
+        <rect x="264" y="44" width="40" height="40" fill="#22d3ee" opacity="0.60" rx="2"/><text x="284" y="100" text-anchor="middle">16²·48</text>
+        <rect x="320" y="50" width="34" height="34" fill="#22d3ee" opacity="0.58" rx="2"/><text x="337" y="100" text-anchor="middle">8²·80</text>
+        <rect x="370" y="50" width="34" height="34" fill="#22d3ee" opacity="0.55" rx="2"/><text x="387" y="100" text-anchor="middle">8²·96</text>
+        <rect x="420" y="54" width="28" height="30" fill="#22d3ee" opacity="0.52" rx="2"/><text x="434" y="100" text-anchor="middle">4²·120</text>
+        <rect x="464" y="56" width="28" height="28" fill="#22d3ee" opacity="0.50" rx="2"/><text x="478" y="100" text-anchor="middle">4²·160</text>
+        <rect x="508" y="60" width="24" height="24" fill="#22d3ee" opacity="0.48" rx="2"/><text x="520" y="100" text-anchor="middle">2²·240</text>
+        <rect x="548" y="62" width="22" height="22" fill="#22d3ee" opacity="0.45" rx="2"/><text x="559" y="100" text-anchor="middle">2²·320</text>
+        <rect x="586" y="64" width="20" height="20" fill="#22d3ee" opacity="0.42" rx="2"/><text x="596" y="100" text-anchor="middle">2²·400</text>
+        <rect x="622" y="66" width="18" height="18" fill="#22d3ee" opacity="0.40" rx="2"/><text x="631" y="100" text-anchor="middle">2²·480</text>
+        <rect x="656" y="68" width="14" height="16" fill="#22d3ee" opacity="0.38" rx="2"/><text x="663" y="100" text-anchor="middle">1²·480</text>
+        <rect x="686" y="74" width="6"  height="10" fill="#fbbf24" opacity="0.95" rx="1"/><text x="689" y="100" text-anchor="middle">1²·2</text>
+        <line x1="700" y1="50" x2="730" y2="50" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="780" y="46" text-anchor="middle" fill="#fbbf24" font-family="Inter" font-size="12" font-weight="600">argmax</text>
+        <text x="780" y="62" text-anchor="middle" fill="#9aa8c2" font-family="JetBrains Mono" font-size="10">[no-person, person]</text>
+      </g>
+    </svg>
+  </div>
+</section>
+
+<section id="codegen">
+  <div class="head"><span class="num">05</span><h2>Generating the model code</h2></div>
+  <p class="sub">From a pretrained <code>.tflite</code> in the MCUNet model zoo to a tree of plain C source you compile into your firmware. Four commands, no PyTorch dependency at codegen time.</p>
+
+  <div class="grid grid-2" style="align-items:stretch">
+    <div class="card">
+      <h3>1 · Pick the net</h3>
+      <p>Edit <a href="../../tinysrc/examples/vww.py"><code>tinysrc/examples/vww.py</code></a> line 25 to set the net id. For VWW0:</p>
+      <pre class="code" style="margin-top:10px"><span class="kw">net_id</span> = <span class="str">'mcunet-vww0'</span></pre>
+    </div>
+    <div class="card">
+      <h3>2 · Fetch the tflite</h3>
+      <p>Drop the file into <code>tinysrc/assets/</code> manually (avoids the torch dependency in <code>download_tflite()</code>):</p>
+      <pre class="code" style="margin-top:10px"><span class="com"># from hanlab18.mit.edu/projects/tinyml/mcunet/release/</span>
+mcunet-10fps_vww.tflite  <span class="com">→ tinysrc/assets/</span></pre>
+    </div>
+    <div class="card">
+      <h3>3 · Run codegen</h3>
+      <p>Generates the full C model into <code>tinysrc/codegen/{Include,Source}/</code>:</p>
+      <pre class="code" style="margin-top:10px"><span class="kw">cd</span> tinysrc
+<span class="fn">python</span> -c <span class="str">"from code_generator.CodegenUtilTFlite \
+  import GenerateSourceFilesFromTFlite; \
+  GenerateSourceFilesFromTFlite( \
+    'assets/mcunet-10fps_vww.tflite', \
+    life_cycle_path='./lifecycle.png')"</span></pre>
+    </div>
+    <div class="card">
+      <h3>4 · Drop into the project</h3>
+      <p>Copy the two output dirs into the firmware tree:</p>
+      <pre class="code" style="margin-top:10px"><span class="fn">cp</span> -r codegen/Include codegen/Source \
+   ../PersonPresence/My_MCC_Config/src/TinyEngine/codegen/</pre>
+    </div>
+  </div>
+
+  <h3 style="margin-top:32px; font-size:18px">What it emits</h3>
+  <p style="color:var(--fg-dim); font-size:14px; max-width:780px">A 51-layer flat <code>invoke()</code>, the activation arena, all weight blobs as <code>const</code> arrays, and one <code>.c</code> per depthwise variant the network actually uses. For VWW0 that's <b>18 depthwise kernel files</b> — the cross product of:</p>
+
+  <div class="grid grid-3" style="margin-top:14px">
+    <div class="card" style="text-align:center">
+      <div style="font-family:var(--mono); color:var(--acc); font-size:18px; font-weight:600">3 × 3 · 5 × 5 · 7 × 7</div>
+      <p style="margin-top:6px">kernel sizes</p>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-family:var(--mono); color:var(--acc); font-size:18px; font-weight:600">stride 1 · stride 2</div>
+      <p style="margin-top:6px">spatial reductions</p>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-family:var(--mono); color:var(--acc); font-size:18px; font-weight:600">plain · mask · bitmask</div>
+      <p style="margin-top:6px">channel-mask variants</p>
+    </div>
+  </div>
+
+  <details style="margin-top:24px">
+    <summary>Click to expand: annotated <code>genModel.c</code> excerpt — first 12 layers</summary>
+    <div class="body">
+      <p style="color:var(--fg-dim); font-size:13px; margin:12px 0">Note how every call writes into a fixed offset of the single <code>buffer0[]</code> arena. <span style="color:var(--amber)">Yellow lines</span> are the public entry points. There is no malloc, no graph object, no scheduler at runtime — this <i>is</i> the schedule.</p>
+      <pre class="code"><span class="hl"><span class="kw">signed char</span>* <span class="fn">getInput</span>() { <span class="kw">return</span> &amp;buffer0[<span class="num">16384</span>]; }</span>
+<span class="hl"><span class="kw">signed char</span>* <span class="fn">getOutput</span>() { <span class="kw">return</span> NNoutput; }   <span class="com">// = &amp;buffer0[160]</span></span>
+
+<span class="kw">void</span> <span class="fn">invoke</span>(<span class="kw">float</span>* labels) {
+<span class="com">/* layer 0 : CONV_2D — 64×64×3 → 32×32×16 (stride 2) */</span>
+  <span class="fn">convolve_s8_kernel3_inputch3_stride2_pad1_fpreq</span>(
+      &amp;buffer0[<span class="num">16384</span>], <span class="num">64</span>,<span class="num">64</span>,<span class="num">3</span>,
+      (<span class="kw">const</span> q7_t*) weight0, bias0, scales0,
+      <span class="num">-128</span>,<span class="num">1</span>,<span class="num">-128</span>,<span class="num">127</span>,
+      &amp;buffer0[<span class="num">0</span>], <span class="num">32</span>,<span class="num">32</span>,<span class="num">16</span>, sbuf, kbuf, <span class="num">-1</span>);
+
+<span class="com">/* layer 1 : DEPTHWISE_CONV_2D — in-place 3×3 stride-1 */</span>
+  <span class="fn">depthwise_kernel3x3_stride1_inplace_CHW_fpreq</span>(
+      &amp;buffer0[<span class="num">0</span>], <span class="num">32</span>,<span class="num">32</span>,<span class="num">16</span>,
+      (<span class="kw">const</span> q7_t*) CHWweight1, offsetBias1, offsetRBias1, scales1,
+      <span class="num">-128</span>,<span class="num">128</span>,<span class="num">-128</span>,<span class="num">127</span>,
+      &amp;buffer0[<span class="num">0</span>], <span class="num">32</span>,<span class="num">32</span>,<span class="num">16</span>, sbuf, <span class="num">-128</span>);   <span class="com">// in == out</span>
+
+<span class="com">/* layer 2 : CONV_2D 1×1 — 16ch → 8ch (squeeze) */</span>
+  <span class="fn">convolve_1x1_s8_ch16_fpreq</span>(&amp;buffer0[<span class="num">0</span>], …, &amp;buffer0[<span class="num">49152</span>], <span class="num">32</span>,<span class="num">32</span>,<span class="num">8</span>, sbuf);
+
+<span class="com">/* layer 3 : CONV_2D 1×1 — 8ch → 48ch (expand) */</span>
+  <span class="fn">convolve_1x1_s8_ch8_fpreq</span>(&amp;buffer0[<span class="num">49152</span>], …, &amp;buffer0[<span class="num">0</span>], <span class="num">32</span>,<span class="num">32</span>,<span class="num">48</span>, sbuf);
+
+<span class="com">/* layer 4 : DEPTHWISE 5×5 stride 2 — spatial 32→16, in-place */</span>
+  <span class="fn">depthwise_kernel5x5_stride2_inplace_CHW_fpreq</span>(&amp;buffer0[<span class="num">0</span>], <span class="num">32</span>,<span class="num">32</span>,<span class="num">48</span>, …,
+      &amp;buffer0[<span class="num">0</span>], <span class="num">16</span>,<span class="num">16</span>,<span class="num">48</span>, sbuf, <span class="num">-128</span>);
+
+<span class="com">/* layers 5-7 : project / expand / depthwise — inverted residual block */</span>
+  <span class="fn">convolve_1x1_s8_ch48_fpreq</span>( …, &amp;buffer0[<span class="num">16384</span>], <span class="num">16</span>,<span class="num">16</span>,<span class="num">16</span>, …);
+  <span class="fn">convolve_1x1_s8_ch16_fpreq</span>(&amp;buffer0[<span class="num">16384</span>], …, &amp;buffer0[<span class="num">0</span>], <span class="num">16</span>,<span class="num">16</span>,<span class="num">64</span>, …);
+  <span class="fn">depthwise_kernel3x3_stride1_inplace_CHW_fpreq</span>(&amp;buffer0[<span class="num">0</span>], …);
+
+<span class="com">/* layer 8 : 1×1 conv — write into a *different* slot to set up the residual ADD */</span>
+  <span class="fn">convolve_1x1_s8_fpreq</span>( …, &amp;buffer0[<span class="num">20480</span>], <span class="num">16</span>,<span class="num">16</span>,<span class="num">16</span>, sbuf);
+
+<span class="com">/* layer 9 : ADD — fused requantize, two int8 inputs, one int8 output */</span>
+  <span class="fn">add_fpreq</span>(<span class="num">4096</span>,
+      &amp;buffer0[<span class="num">20480</span>], <span class="num">0.0705844</span>, <span class="num">6</span>,    <span class="com">// scale + zp of input A</span>
+      &amp;buffer0[<span class="num">16384</span>], <span class="num">0.0849132</span>, <span class="num">-22</span>,  <span class="com">// scale + zp of input B</span>
+      <span class="num">0.0940756</span>, <span class="num">-7</span>,                          <span class="com">// scale + zp of output</span>
+      &amp;buffer0[<span class="num">24576</span>]);
+
+  <span class="com">/* … 41 more layers, ending in a 1×1×2 logit tensor at &amp;buffer0[160] */</span>
+}</pre>
+    </div>
+  </details>
+</section>
+
+<section id="memory">
+  <div class="head"><span class="num">06</span><h2>Memory layout</h2></div>
+  <p class="sub">Two static regions, both fixed at link time. The SRAM arena is the single buffer all activations time-share. Flash holds the weight blobs as <code>const</code> arrays.</p>
+
+  <div style="background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:24px">
+    <svg viewBox="0 0 1100 240" width="100%" style="display:block">
+      <defs>
+        <linearGradient id="sram" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" stop-color="#22d3ee" stop-opacity="0.4"/>
+          <stop offset="1" stop-color="#22d3ee" stop-opacity="0.15"/>
+        </linearGradient>
+        <linearGradient id="flash" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" stop-color="#fbbf24" stop-opacity="0.4"/>
+          <stop offset="1" stop-color="#fbbf24" stop-opacity="0.15"/>
+        </linearGradient>
+      </defs>
+
+      <!-- SRAM row -->
+      <text x="0" y="20" fill="#22d3ee" font-family="JetBrains Mono" font-size="13" font-weight="600">SRAM · activation arena · buffer0[]</text>
+      <text x="1100" y="20" text-anchor="end" fill="#9aa8c2" font-family="JetBrains Mono" font-size="11">PEAK_MEM = 60 800 B</text>
+      <rect x="0" y="32" width="1100" height="56" rx="6" fill="url(#sram)" stroke="#22d3ee" stroke-width="1"/>
+      <!-- offset markers -->
+      <g font-family="JetBrains Mono" font-size="10" fill="#e6ecf5">
+        <line x1="0"   y1="32" x2="0"   y2="98" stroke="#22d3ee" stroke-width="1" opacity="0.6"/>
+        <text x="4"   y="110">0</text>
+        <line x1="3"   y1="32" x2="3"   y2="98" stroke="#fbbf24" stroke-width="2"/>
+        <text x="14"  y="78"  fill="#fbbf24">NNoutput = &amp;buffer0[160] (final logits)</text>
+        <line x1="296" y1="32" x2="296" y2="98" stroke="#22d3ee" stroke-width="1" opacity="0.6"/>
+        <text x="300" y="110">16384</text>
+        <text x="300" y="78"  fill="#22d3ee">getInput() — 64×64×3 = 12 288 B</text>
+        <line x1="518" y1="32" x2="518" y2="98" stroke="#22d3ee" stroke-width="1" opacity="0.6"/>
+        <text x="522" y="110">28672</text>
+        <line x1="888" y1="32" x2="888" y2="98" stroke="#22d3ee" stroke-width="1" opacity="0.6"/>
+        <text x="892" y="110">49152</text>
+        <line x1="1100" y1="32" x2="1100" y2="98" stroke="#22d3ee" stroke-width="1" opacity="0.6"/>
+        <text x="1100" y="110" text-anchor="end">60800</text>
+      </g>
+      <text x="550" y="65" text-anchor="middle" fill="#e6ecf5" font-family="Inter" font-size="12" font-style="italic" opacity="0.85">tensors share this region — live ranges packed at codegen time</text>
+
+      <!-- Flash row -->
+      <text x="0" y="160" fill="#fbbf24" font-family="JetBrains Mono" font-size="13" font-weight="600">Flash · weight blobs · weight0[] / CHWweight1[] / …</text>
+      <text x="1100" y="160" text-anchor="end" fill="#9aa8c2" font-family="JetBrains Mono" font-size="11">MODEL_SIZE = 399 656 B</text>
+      <rect x="0" y="172" width="1100" height="42" rx="6" fill="url(#flash)" stroke="#fbbf24" stroke-width="1"/>
+      <!-- some divisions to imply per-layer blobs -->
+      <g stroke="#fbbf24" stroke-width="0.5" opacity="0.5">
+        <line x1="60"   y1="172" x2="60"   y2="214"/>
+        <line x1="130"  y1="172" x2="130"  y2="214"/>
+        <line x1="220"  y1="172" x2="220"  y2="214"/>
+        <line x1="320"  y1="172" x2="320"  y2="214"/>
+        <line x1="430"  y1="172" x2="430"  y2="214"/>
+        <line x1="540"  y1="172" x2="540"  y2="214"/>
+        <line x1="650"  y1="172" x2="650"  y2="214"/>
+        <line x1="760"  y1="172" x2="760"  y2="214"/>
+        <line x1="870"  y1="172" x2="870"  y2="214"/>
+        <line x1="980"  y1="172" x2="980"  y2="214"/>
+      </g>
+      <text x="550" y="197" text-anchor="middle" fill="#0a0f1c" font-family="Inter" font-size="12" font-weight="600">51 weight + bias + scale blobs (one per layer) · all const · all in flash</text>
+    </svg>
+  </div>
+
+  <div class="grid grid-3" style="margin-top:16px">
+    <div class="card"><h3>Why so small?</h3><p>In-place depthwise lets layer 1's input and output occupy the same 16 KB slot. Without it, peak SRAM would roughly double.</p></div>
+    <div class="card"><h3>Why is flash bigger than the old detector's?</h3><p>NAS for VWW0 spends its budget on channel width (up to 480 ch, 7×7 depthwise) instead of spatial size. Classifier shape — flash-cheap MCUs win, SRAM-cheap MCUs lose.</p></div>
+    <div class="card"><h3>76% SRAM cut vs the old YOLO detector</h3><p>Old <code>person-det</code>: 257 448 B SRAM, 190 864 B flash, ~330 ms. VWW0: 60 800 B SRAM, 399 656 B flash, &lt;70 ms. SRAM is the binding constraint on PIC32CZ-CA, so the trade is correct.</p></div>
+  </div>
+</section>
+
+<section id="mcu">
+  <div class="head"><span class="num">07</span><h2>MCU integration · per-frame flow</h2></div>
+  <p class="sub">Two cooperating Harmony state machines — <code>APP_CAM_Tasks</code> drives the camera, <code>APP_ML_Tasks</code> drives inference. They synchronise via a single flag, <code>processed_frame_data_ready</code>.</p>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>1 · Capture (DMA, no CPU)</h3>
+      <p>OV7670 streams RGB565 over the parallel bus → PCC (Parallel Capture Controller) → DMA → <code>panda_scaled_data[160·120·2]</code>. The VSYNC ISR sets <code>processed_frame_data_ready = true</code>.</p>
+    </div>
+    <div class="card">
+      <h3>2 · Preprocess</h3>
+      <p><code>rgb565_to_modelinput_vww()</code> in <a href="../My_MCC_Config/src/app_cam.c"><code>app_cam.c</code></a> center-crops 160×120 → 120×120, bilinearly resizes to 64×64, decodes RGB565 to RGB888, and writes <code>int8 = uint8 - 128</code> directly into <code>getInput()</code>.</p>
+    </div>
+    <div class="card">
+      <h3>3 · Inference</h3>
+      <pre class="code" style="margin-top:10px"><span class="kw">signed char</span>* in = <span class="fn">getInput</span>();      <span class="com">// &amp;buffer0[16384]</span>
+<span class="fn">rgb565_to_modelinput_vww</span>(frame, in);
+<span class="fn">invoke</span>(<span class="kw">NULL</span>);                       <span class="com">// run the 51-layer graph</span>
+<span class="kw">signed char</span>* out = <span class="fn">getOutput</span>();    <span class="com">// 2× int8 logits</span></pre>
+    </div>
+    <div class="card">
+      <h3>4 · Decision</h3>
+      <p><code>out[0] = no-person</code>, <code>out[1] = person</code> (alphabetical class order — matches <code>torchvision.ImageFolder</code> and MCUNet's <code>eval_tflite.py</code>). Margin = <code>out[1] - out[0]</code> in int8 units.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>5 · EMA + asymmetric hysteresis</h3>
+    <p style="margin-bottom:12px">Raw argmax flickers when logits straddle zero. We low-pass the margin (α = ¼ ≈ 3-frame TC at 15 FPS) and apply different enter/exit thresholds. Brief drops (head-turn, single bad frame) don't lose a detected person.</p>
+    <pre class="code"><span class="com">/* in app_ml.cpp */</span>
+<span class="kw">#define</span> PERSON_EMA_ALPHA_SHIFT  <span class="num">2</span>             <span class="com">// alpha = 1/4</span>
+<span class="kw">#define</span> PERSON_ENTER_Q8         ( <span class="num">4</span> * <span class="num">256</span>)   <span class="com">// flip ON when smoothed margin ≥ +4</span>
+<span class="kw">#define</span> PERSON_EXIT_Q8          (<span class="num">-8</span> * <span class="num">256</span>)   <span class="com">// flip OFF when smoothed margin ≤ -8</span>
+
+s_margin_ema_q8 += (raw_q8 - s_margin_ema_q8) &gt;&gt; PERSON_EMA_ALPHA_SHIFT;
+<span class="kw">if</span> (!s_person_present &amp;&amp; s_margin_ema_q8 &gt;= PERSON_ENTER_Q8) s_person_present = <span class="kw">true</span>;
+<span class="kw">else if</span> ( s_person_present &amp;&amp; s_margin_ema_q8 &lt;= PERSON_EXIT_Q8 ) s_person_present = <span class="kw">false</span>;</pre>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>6 · USB CDC dashboard</h3>
+    <p>16-byte header (magic + frame counter + decision + margin + inference µs) followed by the raw 160×120 RGB565 frame. Python <code>Dashboard_via_USB.py</code> shows live frame, decision badge, logit margin, inference time and FPS.</p>
+  </div>
+</section>
+
+<section id="verify">
+  <div class="head"><span class="num">08</span><h2>Verification harnesses</h2></div>
+  <p class="sub">Three independent ways to test the same firmware — synthetic inputs prove the kernels are wired correctly, baked images prove the model is healthy, the live dashboard proves the camera path is sane.</p>
+
+  <div class="grid grid-3">
+    <div class="card">
+      <h3 style="color:var(--acc)">Smoke test</h3>
+      <p style="margin-bottom:10px"><code>APP_ML_RunSmokeTest()</code> invokes the model on three synthetic constant inputs (mid-grey, all-black, all-white) and prints the resulting logits over UART. Confirms the kernels link, run to completion, and produce numerically distinct outputs for distinct inputs.</p>
+      <pre class="code">midgray → [+a, -a]
+black   → [+b, -b]
+white   → [+c, -c]</pre>
+    </div>
+
+    <div class="card">
+      <h3 style="color:var(--acc)">Image test (ground truth)</h3>
+      <p style="margin-bottom:10px">Set <code>ML_USE_TEST_IMAGES = 1</code> in <code>app_ml.h</code>, rebuild and flash. <code>APP_ML_RunImageTest()</code> bypasses the camera and feeds 6 pre-baked 64×64×3 int8 images from <code>test_images.h</code> through <code>invoke()</code>, reporting PASS/FAIL.</p>
+      <pre class="code"><span class="com">// last run — all 6 PASS</span>
+img[785]   logits=[<span class="num">-32</span>, <span class="num">+34</span>] m=<span class="num">+66</span> person     <span class="str">PASS</span>
+img[4134]  logits=[<span class="num">-26</span>, <span class="num">+27</span>] m=<span class="num">+53</span> person     <span class="str">PASS</span>
+img[4395]  logits=[ <span class="num">-1</span>,  <span class="num">+2</span>] m=<span class="num">+ 3</span> person     <span class="str">PASS</span>
+img[1]     logits=[ <span class="num">+8</span>,  <span class="num">-8</span>] m=<span class="num">-16</span> no-person  <span class="str">PASS</span>
+img[2]     logits=[ <span class="num">+7</span>,  <span class="num">-7</span>] m=<span class="num">-14</span> no-person  <span class="str">PASS</span>
+img[3]     logits=[<span class="num">+31</span>, <span class="num">-31</span>] m=<span class="num">-62</span> no-person  <span class="str">PASS</span></pre>
+    </div>
+
+    <div class="card">
+      <h3 style="color:var(--acc)">Live dashboard</h3>
+      <p style="margin-bottom:10px"><code>Dashboard_via_USB.py</code> over USB CDC. Shows the live RGB565 frame, decision badge (person / no-person), live logit margin, per-frame inference time and rolling FPS. The "real" verification — closes the loop end-to-end through the camera.</p>
+      <pre class="code"><span class="kw">$</span> python Dashboard_via_USB.py
+[<span class="num">15.0</span> FPS] m=<span class="num">+34</span> <span class="str">person</span> · 64 ms
+[<span class="num">14.9</span> FPS] m=<span class="num">+33</span> <span class="str">person</span> · 65 ms
+[<span class="num">15.1</span> FPS] m=<span class="num">-22</span> no-person · 63 ms</pre>
+    </div>
+  </div>
+</section>
+
+<section id="results">
+  <div class="head"><span class="num">09</span><h2>Headline results</h2></div>
+  <p class="sub">VWW0 against the project's previous YOLO-based <code>person-det</code> model, on the same PIC32CZ-CA + OV7670 hardware.</p>
+
+  <table class="cmp">
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>person-det (old)</th>
+        <th>mcunet-vww0 (new)</th>
+        <th>Δ</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Input</td><td class="num">160×128×3</td><td class="num">64×64×3</td><td>—</td></tr>
+      <tr><td>Output</td><td>3× YOLO heads</td><td>2 int8 logits</td><td>simpler</td></tr>
+      <tr><td>Layers</td><td class="num">70</td><td class="num">51</td><td class="num">−27%</td></tr>
+      <tr><td>Peak SRAM</td><td class="num">257 448 B</td><td class="num">60 800 B</td><td class="num win">−76%</td></tr>
+      <tr><td>Flash weights</td><td class="num">190 864 B</td><td class="num">399 656 B</td><td class="num">+109%</td></tr>
+      <tr class="te"><td>Measured inference</td><td class="num">~330 ms</td><td class="num">&lt;70 ms</td><td class="num win">4.7× faster</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="files">
+  <div class="head"><span class="num">10</span><h2>Files map</h2></div>
+  <p class="sub">Every file the integration touches. All paths are relative to <code>PersonPresence/docs/</code> so the links open directly in the IDE.</p>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>Application</h3>
+      <ul style="font-family:var(--mono); font-size:12.5px; line-height:2; list-style:none; padding:0; margin:0">
+        <li><a href="../My_MCC_Config/src/app_ml.cpp">My_MCC_Config/src/app_ml.cpp</a> <span style="color:var(--fg-mute)">— per-frame inference, EMA, hysteresis, harnesses</span></li>
+        <li><a href="../My_MCC_Config/src/app_ml.h">My_MCC_Config/src/app_ml.h</a> <span style="color:var(--fg-mute)">— <code>ML_USE_TEST_IMAGES</code> flag, state enum</span></li>
+        <li><a href="../My_MCC_Config/src/app_cam.c">My_MCC_Config/src/app_cam.c</a> <span style="color:var(--fg-mute)">— RGB565 → 64×64 int8 preprocess</span></li>
+        <li><a href="../My_MCC_Config/src/app_cam.h">My_MCC_Config/src/app_cam.h</a> <span style="color:var(--fg-mute)">— <code>MODEL_IN_H/W/C</code> defines</span></li>
+        <li><a href="../My_MCC_Config/src/test_images.h">My_MCC_Config/src/test_images.h</a> <span style="color:var(--fg-mute)">— 6 baked test images, generated</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>TinyEngine codegen</h3>
+      <ul style="font-family:var(--mono); font-size:12.5px; line-height:2; list-style:none; padding:0; margin:0">
+        <li><a href="../My_MCC_Config/src/TinyEngine/codegen/Source/genModel.c">codegen/Source/genModel.c</a> <span style="color:var(--fg-mute)">— flat <code>invoke()</code></span></li>
+        <li><a href="../My_MCC_Config/src/TinyEngine/codegen/Include/genModel.h">codegen/Include/genModel.h</a> <span style="color:var(--fg-mute)">— <code>PEAK_MEM</code>, <code>MODEL_SIZE</code></span></li>
+        <li><span style="color:var(--fg-dim)">codegen/Source/depthwise_kernel{3,5,7}x{3,5,7}_stride{1,2}_inplace_CHW_fpreq{,_mask,_bitmask}.c</span> <span style="color:var(--fg-mute)">— 18 generated</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Build & host tools</h3>
+      <ul style="font-family:var(--mono); font-size:12.5px; line-height:2; list-style:none; padding:0; margin:0">
+        <li><a href="../cmake/ML_OV7670_GFX/default/.generated/file.cmake">cmake/.../file.cmake</a> <span style="color:var(--fg-mute)">— source list</span></li>
+        <li><a href="../Dashboard_via_USB.py">Dashboard_via_USB.py</a> <span style="color:var(--fg-mute)">— live USB viewer</span></li>
+        <li><a href="../ML Model/ConvertImagesToHex_VWW0.py">ML Model/ConvertImagesToHex_VWW0.py</a> <span style="color:var(--fg-mute)">— PIL-based test_images.h generator</span></li>
+        <li><a href="../../tinysrc/examples/vww.py">tinysrc/examples/vww.py</a> <span style="color:var(--fg-mute)">— codegen entry point</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Documentation</h3>
+      <ul style="font-family:var(--mono); font-size:12.5px; line-height:2; list-style:none; padding:0; margin:0">
+        <li><a href="../CONTEXT.md">PersonPresence/CONTEXT.md</a> <span style="color:var(--fg-mute)">— session handoff</span></li>
+        <li><a href="../../tinysrc/README.md">tinysrc/README.md</a> <span style="color:var(--fg-mute)">— upstream optimization notes</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="refs">
+  <div class="head"><span class="num">11</span><h2>References</h2></div>
+  <div class="grid grid-3">
+    <div class="card">
+      <h3>MCUNet</h3>
+      <p><a href="https://arxiv.org/abs/2007.10319" target="_blank">MCUNet: Tiny Deep Learning on IoT Devices</a> · NeurIPS 2020 (spotlight). Lin, Chen, Lin, Cohn, Gan, Han.</p>
+    </div>
+    <div class="card">
+      <h3>MCUNetV2</h3>
+      <p><a href="https://arxiv.org/abs/2110.15352" target="_blank">MCUNetV2: Memory-Efficient Patch-based Inference</a> · NeurIPS 2021. Introduces patch-based inference for the memory-bottleneck stage.</p>
+    </div>
+    <div class="card">
+      <h3>Code & models</h3>
+      <p><a href="https://github.com/mit-han-lab/tinyengine" target="_blank">github.com/mit-han-lab/tinyengine</a><br><a href="https://github.com/mit-han-lab/mcunet" target="_blank">github.com/mit-han-lab/mcunet</a> (model zoo)</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  PersonPresence · MCUNet-VWW0 on PIC32CZ-CA · documentation rendered from
+  <a href="../CONTEXT.md">CONTEXT.md</a>, <a href="../../tinysrc/README.md">tinysrc/README.md</a>,
+  and the codegen sources. Last verified 2026-06-13.
+</footer>
+
+</main>
+
+<script>
+(function(){
+  const links = Array.from(document.querySelectorAll('nav.top a[href^="#"]'));
+  const sections = links.map(a => document.getElementById(a.getAttribute('href').slice(1))).filter(Boolean);
+  function onScroll(){
+    const y = window.scrollY + 120;
+    let active = sections[0];
+    for (const s of sections){ if (s.offsetTop <= y) active = s; }
+    links.forEach(a => {
+      const on = a.getAttribute('href') === '#' + active.id;
+      a.classList.toggle('active', on);
+    });
+  }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  document.documentElement.style.scrollBehavior = 'smooth';
+  onScroll();
+})();
+</script>
+
+</body>
+</html>
+
+</main>
+</body>
+</html>

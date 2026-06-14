@@ -47,6 +47,10 @@ bool    APP_ML_GetPersonPresent(void);
 void    APP_ML_SetPersonPresent(bool present);
 /* Returns out[0] - out[1] (int8 logit margin). Positive = person. */
 int16_t APP_ML_GetLogitMargin(void);
+/* EMA-smoothed logit margin (whole-margin units). The debounced
+ * GetPersonPresent() flips when this crosses asymmetric enter/exit
+ * thresholds — see PERSON_ENTER_Q8 / PERSON_EXIT_Q8 in app_ml.cpp. */
+int16_t APP_ML_GetMarginEma(void);
 int8_t  APP_ML_GetPersonLogit(void);
 int8_t  APP_ML_GetNoPersonLogit(void);
 /* Wall-clock duration of the most recent invoke(), in microseconds. */

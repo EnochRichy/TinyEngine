@@ -43,6 +43,20 @@ APP_ML_DATA app_mlData;
 
 extern APP_CAM_DATA app_camData;
 
+/* ---- Decision smoothing (EMA on margin + asymmetric hysteresis) ----
+ * Raw argmax flickers when person/no-person logits straddle zero. We
+ * low-pass the margin and apply different enter/exit thresholds so that
+ * (a) entry is responsive but past the noise floor, and (b) brief drops
+ * (head turn, single bad frame) don't lose a detected person.
+ *
+ * Tuning workflow at 15 FPS — watch UART log raw_margin vs ema_margin:
+ *  - laggy entry           -> lower PERSON_ENTER_Q8 or PERSON_EMA_ALPHA_SHIFT
+ *  - drops on head-turn    -> raise |PERSON_EXIT_Q8| or PERSON_EMA_ALPHA_SHIFT
+ */
+#define PERSON_EMA_ALPHA_SHIFT  2            /* alpha = 1/4, TC ~3 frames (~200 ms) */
+#define PERSON_ENTER_Q8         ( 4 * 256)   /* smoothed margin must reach +4 to flip ON  */
+#define PERSON_EXIT_Q8          (-8 * 256)   /* smoothed margin must reach -8 to flip OFF */
+
 static volatile bool    s_inference_complete = true;
 static volatile bool    s_person_present = false;
 static volatile int16_t s_logit_margin = 0;   /* out[0] - out[1], int8 range */
@@ -50,6 +64,7 @@ static volatile int8_t  s_person_logit = 0;
 static volatile int8_t  s_noperson_logit = 0;
 static volatile uint32_t s_inference_us = 0;  /* wall-clock duration of last invoke() */
 static volatile uint8_t  s_inference_count = 0; /* increments after each run, wraps at 256 */
+static volatile int16_t  s_margin_ema_q8 = 0;   /* low-pass of s_logit_margin, Q8.8 */
 
 
 /******************************************************************************
@@ -98,20 +113,33 @@ static void run_person_classification(void)
     s_inference_us = (uint32_t)(((uint64_t)(t1 - t0) * 1000000ULL)
                                 / SYS_TIME_FrequencyGet());
 
-    /* Step 3: argmax on the 2 int8 logits (out[0]=no-person, out[1]=person). */
+    /* Step 3: argmax on the 2 int8 logits (out[0]=no-person, out[1]=person),
+     * then low-pass the margin and apply asymmetric hysteresis on the smoothed
+     * value to commit a debounced decision. Raw logits/margin are still stored
+     * unmodified for diagnostics. */
     const signed char* out = getOutput();
     int8_t noperson_logit  = out[0];
     int8_t person_logit    = out[1];
-    bool present = (person_logit > noperson_logit);
 
-    APP_ML_SetPersonPresent(present);
     s_person_logit   = person_logit;
     s_noperson_logit = noperson_logit;
-    s_logit_margin = (int16_t)((int)person_logit - (int)noperson_logit);
+    s_logit_margin   = (int16_t)((int)person_logit - (int)noperson_logit);
 
-    printf("Person: %s  logits=[%d, %d]  margin=%d\r\n",
+    /* Q8.8: multiply by 256 (compiler folds to shift; avoids UB on negative
+     * left-shift). Right-shift of signed is implementation-defined but
+     * arithmetic on ARM/XC32 — what we want for the EMA delta. */
+    int16_t raw_q8 = (int16_t)(s_logit_margin * 256);
+    s_margin_ema_q8 += (int16_t)((raw_q8 - s_margin_ema_q8) >> PERSON_EMA_ALPHA_SHIFT);
+
+    bool present = s_person_present;
+    if (!present && s_margin_ema_q8 >= PERSON_ENTER_Q8)      present = true;
+    else if (present && s_margin_ema_q8 <= PERSON_EXIT_Q8)   present = false;
+    APP_ML_SetPersonPresent(present);
+
+    int ema_margin = (int)(s_margin_ema_q8 >> 8);
+    printf("Person: %s  logits=[%d, %d]  margin=%d  ema=%d\r\n",
            present ? "YES" : "no ",
-           (int)person_logit, (int)noperson_logit, (int)s_logit_margin);
+           (int)person_logit, (int)noperson_logit, (int)s_logit_margin, ema_margin);
 
     s_inference_count = (uint8_t)(s_inference_count + 1u);
     s_inference_complete = true;
@@ -185,6 +213,11 @@ void APP_ML_SetPersonPresent(bool present)
 int16_t APP_ML_GetLogitMargin(void)
 {
     return s_logit_margin;
+}
+
+int16_t APP_ML_GetMarginEma(void)
+{
+    return (int16_t)(s_margin_ema_q8 >> 8);
 }
 
 int8_t APP_ML_GetPersonLogit(void)
