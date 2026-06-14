@@ -9,12 +9,14 @@ PID  = 0x0053
 EP_IN = 0x81
 PKT   = 512
 
-FRAME_WIDTH        = 64
-FRAME_HEIGHT       = 64
-FRAME_BPP          = 1
-FRAME_PAYLOAD_SIZE = FRAME_WIDTH * FRAME_HEIGHT * FRAME_BPP  # 4096
+# 80x80 RGB888 — the exact tensor MCUNet-VWW1 sees (mirrored from
+# rgb565_to_modelinput_vww before the -128 int8 shift).
+FRAME_WIDTH        = 80
+FRAME_HEIGHT       = 80
+FRAME_BPP          = 3
+FRAME_PAYLOAD_SIZE = FRAME_WIDTH * FRAME_HEIGHT * FRAME_BPP  # 19200
 FRAME_HEADER_SIZE  = 8
-FRAME_TOTAL_SIZE   = FRAME_HEADER_SIZE + FRAME_PAYLOAD_SIZE  # 4096
+FRAME_TOTAL_SIZE   = FRAME_HEADER_SIZE + FRAME_PAYLOAD_SIZE  # 19208
 
 MARKER = bytes([0xAA, 0x55, 0xAA, 0x55])
 
@@ -93,13 +95,14 @@ while True:
         print("Corrupt frame size:", len(frame_data), " → resyncing")
         continue
 
-    # Convert to image
-    frame_gray = np.frombuffer(frame_data, dtype=np.uint8)
-    frame_gray = frame_gray.reshape((FRAME_HEIGHT, FRAME_WIDTH))
+    # Convert to image — RGB888 HWC, exactly as the model sees it
+    frame_rgb = np.frombuffer(frame_data, dtype=np.uint8).reshape(
+        (FRAME_HEIGHT, FRAME_WIDTH, FRAME_BPP))
+    frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
 
     # ---------- Display ----------
-    display = cv2.resize(frame_gray, (256,256), interpolation=cv2.INTER_NEAREST)
-    cv2.imshow("USB Camera Stream", display)
+    display = cv2.resize(frame_bgr, (320, 320), interpolation=cv2.INTER_NEAREST)
+    cv2.imshow("Model input (80x80 RGB)", display)
 
     # ---------- FPS Calculation ----------
     frame_count += 1
@@ -128,7 +131,7 @@ while True:
         filename = f"{record_label}_{frames_collected:04d}.png"
         filepath = os.path.join(folder, filename)
 
-        cv2.imwrite(filepath, frame_gray)
+        cv2.imwrite(filepath, frame_bgr)
         frames_collected += 1
 
         if frames_collected >= CAPTURE_FRAMES:

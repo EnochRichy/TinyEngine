@@ -62,15 +62,19 @@ uint8_t  transmitDataBuffer[512] CACHE_ALIGN;
 
 extern APP_CAM_DATA app_camData;
 
-// greyscale image is provided by the camera module; use APP_Cam_GetGreyscaleImg()
+/* Stream the 80x80x3 RGB snapshot of the model input (APP_Cam_GetModelInputSnapshot)
+ * so the host can verify exactly what the classifier sees. 19200 B doesn't divide
+ * evenly into 512-B bulk packets: 37 full packets + one 256-B tail packet. */
 
-#define FRAME_WIDTH          64
-#define FRAME_HEIGHT         64
-#define FRAME_BPP            1
-#define FRAME_PAYLOAD_SIZE   (FRAME_WIDTH * FRAME_HEIGHT * FRAME_BPP)   // 4096
+#define FRAME_WIDTH          MODEL_IN_W
+#define FRAME_HEIGHT         MODEL_IN_H
+#define FRAME_BPP            MODEL_IN_C
+#define FRAME_PAYLOAD_SIZE   (FRAME_WIDTH * FRAME_HEIGHT * FRAME_BPP)         // 19200
 #define FRAME_HEADER_SIZE    8
 #define FRAME_PACKET_SIZE    512
-#define FRAME_NUM_PACKETS    (FRAME_PAYLOAD_SIZE / FRAME_PACKET_SIZE)   // 75
+#define FRAME_NUM_FULL_PKTS  (FRAME_PAYLOAD_SIZE / FRAME_PACKET_SIZE)         // 37
+#define FRAME_TAIL_PKT_SIZE  (FRAME_PAYLOAD_SIZE - FRAME_NUM_FULL_PKTS * FRAME_PACKET_SIZE) // 256
+#define FRAME_NUM_PACKETS    (FRAME_NUM_FULL_PKTS + (FRAME_TAIL_PKT_SIZE > 0 ? 1 : 0))      // 38
 
 static uint8_t  frameHeader[FRAME_HEADER_SIZE];
 static uint32_t frameCounter = 0;
@@ -171,9 +175,9 @@ void APP_USBDeviceEventHandler(USB_DEVICE_EVENT event, void * eventData, uintptr
             app_usbData.epDataWritePending = false;
             if (txPacketIndex < FRAME_NUM_PACKETS)
             {
-                // Choose flag: MORE_DATA for all but last, DATA_COMPLETE for last
-                USB_DEVICE_TRANSFER_FLAGS flags =
-                    (txPacketIndex == (FRAME_NUM_PACKETS - 1)) ?
+                bool last = (txPacketIndex == (FRAME_NUM_PACKETS - 1));
+                size_t pktSize = last ? FRAME_TAIL_PKT_SIZE : FRAME_PACKET_SIZE;
+                USB_DEVICE_TRANSFER_FLAGS flags = last ?
                     USB_DEVICE_TRANSFER_FLAGS_DATA_COMPLETE :
                     USB_DEVICE_TRANSFER_FLAGS_MORE_DATA_PENDING;
 
@@ -181,8 +185,8 @@ void APP_USBDeviceEventHandler(USB_DEVICE_EVENT event, void * eventData, uintptr
                     app_usbData.usbDevHandle,
                     &app_usbData.writeTranferHandle,
                     app_usbData.endpointTx,
-                    (void *)(APP_Cam_GetGreyscaleImg() + (txPacketIndex * FRAME_PACKET_SIZE)),
-                    FRAME_PACKET_SIZE,
+                    (void *)(APP_Cam_GetModelInputSnapshot() + (txPacketIndex * FRAME_PACKET_SIZE)),
+                    pktSize,
                     flags
                 );
 
@@ -194,7 +198,7 @@ void APP_USBDeviceEventHandler(USB_DEVICE_EVENT event, void * eventData, uintptr
                 streamingInProgress        = false;
                 frameCounter++;          // for debug / PC sync
             }
-                
+
             break;
 
         /* These events are not used in this demo. */

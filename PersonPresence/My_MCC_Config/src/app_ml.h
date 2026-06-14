@@ -19,11 +19,19 @@
 extern "C" {
 #endif
 
+/* When 1, APP_ML_Initialize boots into APP_ML_STATE_IMAGE_TEST instead of
+ * the live-camera service-tasks loop. The model is invoked on a small set
+ * of pre-baked VWW images compiled into test_images.h, looping forever.
+ * Use to isolate model deployment correctness from camera issues. Set
+ * back to 0 for normal operation. */
+#define ML_USE_TEST_IMAGES 1
+
 typedef enum
 {
     APP_ML_STATE_INIT = 0,
     APP_ML_STATE_SERVICE_TASKS,
     APP_ML_STATE_SMOKE_TEST,
+    APP_ML_STATE_IMAGE_TEST,
 } APP_ML_STATES;
 
 typedef struct
@@ -46,6 +54,12 @@ int16_t APP_ML_GetLogitMargin(void);
  * patterns (midgray / black / white) and prints the 2 output logits over
  * UART. Call once after APP_ML_Initialize, before the camera loop runs. */
 void APP_ML_RunSmokeTest(void);
+
+/* Camera-bypass model verifier. Iterates through the test_images[] manifest
+ * compiled into test_images.h, copies each int8 image into getInput(),
+ * runs invoke(), and prints the resulting logits + expected/actual decision.
+ * Loops indefinitely; gated by ML_USE_TEST_IMAGES. */
+void APP_ML_RunImageTest(void);
 
 /* Legacy gesture-API shims (kept so app_display.c continues to compile).
  * Mapping: person -> 0, no person -> 1. */

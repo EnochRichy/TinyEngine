@@ -188,6 +188,10 @@ void APP_CAM_Tasks( void );
 // Accessors
 const uint8_t *APP_Cam_GetGreyscaleImg(void);
 const uint8_t *APP_Cam_GetRGB565Frame(void);
+const uint8_t *APP_Cam_GetModelInputSnapshot(void);
+/* Overwrite the snapshot buffer. Used by image-test mode to display the
+ * pre-baked test image being inferenced via the existing USB stream. */
+void APP_Cam_PutModelInputSnapshot(const uint8_t *src);
 uint8_t APP_Cam_GetIdentifiedGesture(void);
 void APP_Cam_SetIdentifiedGesture(uint8_t id);
 

@@ -60,6 +60,11 @@ extern APP_DISPLAY_DATA app_displayData;
 /* Module-local: 64x64 grayscale image for ML inference */
 static uint8_t greyscale_img_local[ML_IMG_W * ML_IMG_H];
 
+/* Snapshot of what the model actually sees: 80x80x3 RGB888 HWC, uint8 [0,255]
+ * (the same per-pixel values the model receives, before the -128 shift to int8).
+ * Written by rgb565_to_modelinput_vww(); streamed over USB for verification. */
+static uint8_t model_input_snapshot[MODEL_IN_BYTES];
+
 /* ============================================================================
  * Gamma Correction Tables (for color display rendering)
  * ============================================================================ */
@@ -423,6 +428,7 @@ void rgb565_to_modelinput_vww(const uint8_t *src, signed char *dst)
         int src_y = (dst_y * IMG_HEIGHT) / MODEL_IN_H;          /* 120/80 */
         const uint8_t *row = &src[src_y * IMG_WIDTH * 2];
         signed char *out_row = &dst[dst_y * MODEL_IN_W * MODEL_IN_C];
+        uint8_t *snap_row = &model_input_snapshot[dst_y * MODEL_IN_W * MODEL_IN_C];
 
         for (int dst_x = 0; dst_x < MODEL_IN_W; dst_x++)
         {
@@ -437,6 +443,11 @@ void rgb565_to_modelinput_vww(const uint8_t *src, signed char *dst)
             uint8_t r8 = (uint8_t)((r5 << 3) | (r5 >> 2));
             uint8_t g8 = (uint8_t)((g6 << 2) | (g6 >> 4));
             uint8_t b8 = (uint8_t)((b5 << 3) | (b5 >> 2));
+
+            /* Mirror RGB888 into snapshot for USB host visualization */
+            snap_row[dst_x*3 + 0] = r8;
+            snap_row[dst_x*3 + 1] = g8;
+            snap_row[dst_x*3 + 2] = b8;
 
             /* uint8 [0,255] -> int8 [-128,127] */
             out_row[dst_x*3 + 0] = (signed char)((int)r8 - 128);
@@ -473,6 +484,26 @@ const uint8_t *APP_Cam_GetGreyscaleImg(void)
 const uint8_t *APP_Cam_GetRGB565Frame(void)
 {
     return panda_scaled_data;
+}
+
+/**
+ * APP_Cam_GetModelInputSnapshot - 80x80x3 RGB888 mirror of the model input.
+ *
+ * Populated by rgb565_to_modelinput_vww() each time the camera frame is
+ * preprocessed for inference. Layout: HWC, uint8 [0,255], same per-pixel
+ * values the model sees before the -128 shift to int8. Use over USB to
+ * verify the model is being fed the expected image.
+ */
+const uint8_t *APP_Cam_GetModelInputSnapshot(void)
+{
+    return model_input_snapshot;
+}
+
+void APP_Cam_PutModelInputSnapshot(const uint8_t *src)
+{
+    for (uint32_t i = 0; i < (uint32_t)MODEL_IN_BYTES; ++i) {
+        model_input_snapshot[i] = src[i];
+    }
 }
 
 // *****************************************************************************

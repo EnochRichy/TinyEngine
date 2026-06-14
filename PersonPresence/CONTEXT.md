@@ -70,104 +70,108 @@ is correct.
 
 ---
 
-## Open bug — model always says "person"
+## Status — VWW0 working end-to-end (2026-06-13)
 
-### Symptoms
-
-Real frames consistently produce mirror-symmetric logits like `[+a, −a]` with
-margins 19–53 (all "person"), even with the camera lens covered.
-
-### Smoke-test result (decisive)
-
-`APP_ML_RunSmokeTest()` was added (already wired into [app_ml.cpp](My_MCC_Config/src/app_ml.cpp) and reachable
-via `APP_ML_STATE_SMOKE_TEST` in the state machine). Three deterministic patterns
-fed straight into `getInput()` bypass the camera path entirely:
+Both the firmware integration and the trained model are healthy. The
+model produces clean asymmetric logits per image with all 6 ground-truth
+test images PASSing:
 
 ```
-smoke[midgray] logits=[4, -5]   margin=9   real=0.88   → near-neutral ✓
-smoke[black]   logits=[17, -18] margin=35  real=3.44   → confident person (OOD)
-smoke[white]   logits=[12, -12] margin=24  real=2.36   → confident person (OOD)
+img[000000000785] logits=[np=-32, p= 34] margin= 66 expected=person     PASS
+img[000000004134] logits=[np=-26, p= 27] margin= 53 expected=person     PASS
+img[000000004395] logits=[np= -1, p=  2] margin=  3 expected=person     PASS  (low conf — 57%)
+img[images__1   ] logits=[np=  8, p= -8] margin=-16 expected=no-person  PASS
+img[images__2   ] logits=[np=  7, p= -7] margin=-14 expected=no-person  PASS
+img[images      ] logits=[np= 31, p=-31] margin=-62 expected=no-person  PASS
 ```
 
-**The midgray near-neutral output proves the deployed model math is correct.**
-Confident-person on solid black/white is normal out-of-distribution behavior —
-ImageNet-style classifiers always misbehave on uniform synthetic inputs.
+Two bugs were found and fixed to get here:
 
-### What this implies
+1. **Output index swap** — firmware was reading `out[0]` as person and
+   `out[1]` as no-person, but MCUNet's `eval_tflite.py` follows
+   `torchvision.datasets.ImageFolder` alphabetical ordering which
+   assigns class 0 to "non-person" and class 1 to "person". Fixed in
+   [app_ml.cpp](My_MCC_Config/src/app_ml.cpp): `out[0] = no-person`,
+   `out[1] = person`.
 
-The bug is **not** in the codegen or quantization. Real frames must be producing
-pixel statistics that look as out-of-distribution to the network as solid black
-does (which gave margin 35, very close to the user's real-frame margins).
+2. **`test_images.h` generated at the wrong dimensions** — the file
+   was emitted by the converter with `--width 80 --height 80` (the
+   VWW1 size) instead of 64×64 for VWW0. Each array was 19200 bytes
+   (80×80×3) but the firmware `memcpy`s 12288 bytes (64×64×3) into
+   `getInput()`, so it copied the first ~51 rows of an 80-wide image
+   laid out as if they were 64-wide rows — garbage input. The
+   resulting `[+a, −a]` mirror-symmetric output was *not* a model
+   bug: with garbage inputs, a 2-class softmax head fires symmetrically
+   on whatever low-level statistics survive (the head's two output
+   channels are naturally near-antisymmetric — Pearson correlation
+   of weight42 channels = −0.913 — because softmax is shift-invariant
+   and training uses up that gauge freedom). On real in-domain inputs
+   the same head discriminates cleanly.
 
-### Next diagnostic — instrument the input buffer
+### Output interpretation
 
-The exact next step. Add this right after the `rgb565_to_modelinput_vww()` call
-in `run_person_classification()` (already inserted in
-[app_ml.cpp](My_MCC_Config/src/app_ml.cpp)):
+The two int8 values at `getOutput()` are quantized logits. Multiply by
+the model's output scale (`0.09819`, zp=0) to get real-valued logits.
+`margin = out[1] − out[0]` in int8 units; sign = decision, magnitude =
+confidence. Rule of thumb: int8 margin ≈ 10 → ~73% softmax, ≈ 20 →
+~88%, ≈ 50 → ~99%. If you want to suppress borderline triggers (like
+the 4395 case above with margin 3 = ~57%), threshold on
+`APP_ML_GetLogitMargin()` before reporting a presence event.
 
-```c
-static int dbg_count = 0;
-if ((dbg_count++ & 0x1F) == 0) {                       /* every 32 frames */
-    int rmin=127, rmax=-128, gmin=127, gmax=-128, bmin=127, bmax=-128;
-    long rsum=0, gsum=0, bsum=0;
-    const int N = MODEL_IN_H * MODEL_IN_W;             /* 4096 px */
-    for (int i = 0; i < N; ++i) {
-        int r = in[i*3+0], g = in[i*3+1], b = in[i*3+2];
-        if (r<rmin) rmin=r; if (r>rmax) rmax=r; rsum+=r;
-        if (g<gmin) gmin=g; if (g>gmax) gmax=g; gsum+=g;
-        if (b<bmin) bmin=b; if (b>bmax) bmax=b; bsum+=b;
-    }
-    printf("in stats: R[%d..%d mean=%ld] G[%d..%d mean=%ld] B[%d..%d mean=%ld]  px[0]=(%d,%d,%d)\r\n",
-           rmin,rmax,rsum/N, gmin,gmax,gsum/N, bmin,bmax,bsum/N,
-           in[0],in[1],in[2]);
-}
+### Image-test harness usage
+
+Set `ML_USE_TEST_IMAGES = 1` in [app_ml.h](My_MCC_Config/src/app_ml.h),
+build + flash, observe UART. Set back to 0 to return to live-camera
+mode. Regenerate `test_images.h` with:
+
+```bash
+cd d:/TinyEngine/PersonPresence
+python "ML Model/ConvertImagesToHex_VWW0.py" \
+    --in-dir <ImageFolder root with person/, non-person/ subdirs> \
+    --n-per-class 3 \
+    --out "My_MCC_Config/src/test_images.h"
 ```
 
-Then capture three readings:
-
-1. Camera pointing at a well-lit person.
-2. Camera pointing at a plain wall.
-3. Lens fully covered.
-
-### What the readings would mean
-
-- **Healthy**: each channel spans ~150+ int8 values; means differ between
-  scenes; lens-covered means cluster near −100.
-- **Pixel-range collapse** (range < 50 even on contrasty scenes): OV7670 AGC /
-  exposure / gamma is stuck — needs sensor-register reconfiguration.
-- **R and B means swapped vs. expectation**: OV7670 is emitting **BGR565**
-  not RGB565. Quick A/B fix is to swap R and B at
-  [app_cam.c:442-444](My_MCC_Config/src/app_cam.c) (swap the
-  `out_row[dst_x*3 + 0]` and `out_row[dst_x*3 + 2]` assignments).
-- **All three channel means nearly identical in every scene**: camera is
-  effectively grayscale.
-
-### Likely root causes (ranked)
-
-1. **OV7670 register config** producing images stylistically unlike VWW
-   training data (COCO subset). Most common: AGC clamping the dynamic range,
-   or wrong gamma curve.
-2. **Channel order BGR vs RGB**.
-3. **64×64 nearest-neighbor downsample is too aggressive** — VWW training
-   used PIL bilinear. Possible but unlikely to cause this severity.
+The converter defaults to 64×64 for VWW0; no `--width`/`--height` flags
+are needed for this project. After regenerating, the file header should
+read `Layout: 64 rows x 64 cols x 3 ch HWC int8` and arrays should be
+sized `[12288]`. (If you ever swap to a different MCUNet variant, pass
+`--width 80 --height 80` for VWW1 or `--width 144 --height 144` for
+VWW2.)
 
 ---
 
-## Fallback options if VWW0 can't be salvaged
+## Fallback options if a faster/smaller model is needed
 
-- `mcunet-vww1` ("5fps_vww", 144×144 input) — better accuracy, ~200 ms
-  inference, larger SRAM. Same `vww.py` codegen path, change net id.
+- **`mcunet-vww1`** — verified working in the sibling project
+  `d:/TinyEngine/PERSONPRESENCE_VWW1/` (80×80×3 input, ~150-250 ms,
+  93 KB SRAM). Larger input/SRAM than VWW0 but fewer flash bytes.
 - `mcunet-vww2` ("320kb-1mb_vww") — 1 MB flash budget instead of 2 MB,
-  smaller weights than vww0, slightly slower than vww0.
+  144×144 input.
 - Fine-tune VWW0 on OV7670-captured frames — `DatasetCapture_via_USB.py`
-  in this project already streams frames over USB CDC for dataset building.
-  Out of scope for this session.
+  in this project already streams frames over USB CDC for dataset
+  building. Useful if real-camera frames are out-of-domain vs.
+  COCO-derived training data.
 
 ## Key files
 
 - [My_MCC_Config/src/app_ml.cpp](My_MCC_Config/src/app_ml.cpp) —
-  `run_person_classification()` is the per-frame pipeline; `APP_ML_RunSmokeTest()`
-  the synthetic-input harness.
+  `run_person_classification()` is the per-frame pipeline
+  (`out[0]=no-person, out[1]=person`); `APP_ML_GetLogitMargin()` returns
+  `out[1] - out[0]` in int8 units (positive → person, ≈10 → ~73%,
+  ≈20 → ~88%, ≈50 → ~99% softmax); `APP_ML_RunSmokeTest()` the
+  synthetic-input harness (midgray/black/white); `APP_ML_RunImageTest()`
+  the camera-bypass verifier driven by `test_images[]` from
+  `test_images.h`.
+- [My_MCC_Config/src/app_ml.h](My_MCC_Config/src/app_ml.h) —
+  `ML_USE_TEST_IMAGES` compile flag toggling the image-test boot path,
+  `APP_ML_STATE_IMAGE_TEST` enum value.
+- [My_MCC_Config/src/test_images.h](My_MCC_Config/src/test_images.h) —
+  generated; 6 × 12288 B int8 arrays + manifest. Regenerate via
+  `ML Model/ConvertImagesToHex_VWW0.py` (see §Image-test harness usage above).
+- [ML Model/ConvertImagesToHex_VWW0.py](ML Model/ConvertImagesToHex_VWW0.py) —
+  PIL-based ImageFolder → C-header tool. Parameterized for VWW0 (64×64)
+  and VWW1 (80×80) via `--width`/`--height`.
 - [My_MCC_Config/src/app_cam.c](My_MCC_Config/src/app_cam.c#L416) —
   `rgb565_to_modelinput_vww()` (line 416 onward).
 - [My_MCC_Config/src/app_cam.h](My_MCC_Config/src/app_cam.h#L182) —

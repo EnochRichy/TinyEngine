@@ -1,8 +1,13 @@
 /*******************************************************************************
   Application ML Source File (TinyEngine MCUNet-VWW0 person presence)
 
-  Visual Wake Words classifier: 64x64x3 int8 input, 2 int8 logits output
-  (out[0]=person, out[1]=no-person). Per-frame flow:
+  Visual Wake Words classifier: 64x64x3 int8 input, 2 int8 logits output.
+  Output index mapping: out[0] = no-person, out[1] = person, matching
+  torchvision ImageFolder's alphabetical class assignment ("non-person" <
+  "person") used by mcunet/eval_tflite.py. Verified empirically on the
+  VWW1 sibling project; ported here on the same template assumption and
+  re-verifiable via the embedded image-test harness (ML_USE_TEST_IMAGES).
+  Per-frame flow:
 
     1. Camera deposits a 160x120 RGB565 frame in panda_scaled_data[].
     2. rgb565_to_modelinput_vww() center-crops + downsamples to 64x64 HWC int8
@@ -17,6 +22,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "app_cam.h"
 #include "peripheral/port/plib_port.h"
@@ -27,6 +33,10 @@ extern "C" {
      * we never call them, so the linker won't pull anything in. */
     #include "TinyEngine/include/genNN.h"
 }
+
+#if ML_USE_TEST_IMAGES
+    #include "test_images.h"
+#endif
 
 APP_ML_DATA app_mlData;
 
@@ -83,10 +93,10 @@ static void run_person_classification(void)
     invoke(NULL);
     
 
-    /* Step 3: argmax on the 2 int8 logits (out[0]=person, out[1]=no-person). */
+    /* Step 3: argmax on the 2 int8 logits (out[0]=no-person, out[1]=person). */
     const signed char* out = getOutput();
-    int8_t person_logit    = out[0];
-    int8_t noperson_logit  = out[1];
+    int8_t noperson_logit  = out[0];
+    int8_t person_logit    = out[1];
     bool present = (person_logit > noperson_logit);
 
     APP_ML_SetPersonPresent(present);
@@ -107,7 +117,12 @@ static void run_person_classification(void)
 
 void APP_ML_Initialize(void)
 {
+#if ML_USE_TEST_IMAGES
+    /* Camera-bypass model verifier — see APP_ML_RunImageTest. */
+    app_mlData.state = APP_ML_STATE_IMAGE_TEST;
+#else
     app_mlData.state = APP_ML_STATE_INIT;
+#endif
     /* TinyEngine has no runtime allocator; weights and buffers are static. */
 }
 
@@ -127,6 +142,10 @@ void APP_ML_Tasks(void)
 
         case APP_ML_STATE_SMOKE_TEST:
              APP_ML_RunSmokeTest();
+             break;
+
+        case APP_ML_STATE_IMAGE_TEST:
+             APP_ML_RunImageTest();
              break;
 
         default:
@@ -193,9 +212,9 @@ static void smoke_run_pattern(const char *name, signed char fill)
     invoke(NULL);
 
     const signed char *out = getOutput();
-    int p = out[0], np = out[1];
-    printf("smoke[%s] logits=[%d, %d]  decision=%s\r\n",
-           name, p, np, (p > np) ? "person" : "no-person");
+    int np = out[0], p = out[1];
+    printf("smoke[%s] logits=[np=%d, p=%d]  decision=%s\r\n",
+           name, np, p, (p > np) ? "person" : "no-person");
 }
 
 void APP_ML_RunSmokeTest(void)
@@ -208,3 +227,75 @@ void APP_ML_RunSmokeTest(void)
     printf("---- end smoke test ----\r\n");
     s_inference_complete = true;
 }
+
+
+/******************************************************************************
+ * Image test                                                                 *
+ *                                                                            *
+ * Bypasses the camera entirely: copies pre-baked VWW images (compiled into   *
+ * test_images.h by ML Model/ConvertImagesToHex.py) into getInput(), runs     *
+ * invoke(), and prints expected vs actual decision. Used to confirm the      *
+ * deployed model itself classifies correctly when given clean ground-truth   *
+ * input — separating model-deployment bugs from camera issues.               *
+ ******************************************************************************/
+
+#if ML_USE_TEST_IMAGES
+
+/* Coarse busy-wait between images so a UART log reader has time to scroll
+ * through each line. Not real-time-critical — this is a debug path. */
+#define IMAGE_TEST_HOLD_LOOPS  20000000UL
+
+static void image_test_hold(void)
+{
+    for (volatile uint32_t i = 0; i < IMAGE_TEST_HOLD_LOOPS; ++i) {
+        __asm("nop");
+    }
+}
+
+void APP_ML_RunImageTest(void)
+{
+    TEST_PIN_Set();
+    s_inference_complete = false;
+    printf("---- TinyEngine VWW image test (%d images) ----\r\n",
+           test_images_count);
+
+    for (int idx = 0; idx < test_images_count; ++idx) {
+        const test_image_t *t = &test_images[idx];
+
+        /* Fill the model input directly. test_images[].data is already
+         * in int8 [-128,127] form — same domain as getInput() expects. */
+        signed char *in = getInput();
+        memcpy(in, t->data, (size_t)(MODEL_IN_H * MODEL_IN_W * MODEL_IN_C));
+
+        invoke(NULL);
+
+        const signed char *out = getOutput();
+        int np = out[0];
+        int p  = out[1];
+        int actual = (p > np) ? 0 : 1;
+        int margin = p - np;
+        const char *exp_str = (t->expected_label == 0) ? "person" : "no-person";
+        const char *act_str = (actual == 0) ? "person" : "no-person";
+        const char *verdict = (actual == t->expected_label) ? "PASS" : "FAIL";
+
+        printf("img[%-20s] logits=[np=%d, p=%d] margin=%d expected=%s decision=%s %s\r\n",
+               t->name, np, p, margin, exp_str, act_str, verdict);
+
+        TEST_PIN_Clear();
+
+       // image_test_hold();
+    }
+
+    printf("---- end image test (looping) ----\r\n");
+    s_inference_complete = true;
+}
+
+#else /* !ML_USE_TEST_IMAGES */
+
+void APP_ML_RunImageTest(void)
+{
+    /* No-op when test images are not compiled in. Kept defined so the
+     * symbol resolves regardless of the build flag. */
+}
+
+#endif /* ML_USE_TEST_IMAGES */
