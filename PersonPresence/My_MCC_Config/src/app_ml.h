@@ -24,7 +24,7 @@ extern "C" {
  * of pre-baked VWW images compiled into test_images.h, looping forever.
  * Use to isolate model deployment correctness from camera issues. Set
  * back to 0 for normal operation. */
-#define ML_USE_TEST_IMAGES 1
+#define ML_USE_TEST_IMAGES 0
 
 typedef enum
 {

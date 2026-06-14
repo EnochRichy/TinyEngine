@@ -25,7 +25,7 @@ extern "C" {
  * the USB host can also see each input via model_input_snapshot. Use to
  * isolate model deployment correctness from camera issues. Set back to 0
  * for normal operation. */
-#define ML_USE_TEST_IMAGES 1
+#define ML_USE_TEST_IMAGES 0
 
 typedef enum
 {

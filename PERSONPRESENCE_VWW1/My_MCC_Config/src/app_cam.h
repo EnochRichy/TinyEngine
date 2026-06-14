@@ -198,8 +198,9 @@ void APP_Cam_SetIdentifiedGesture(uint8_t id);
 /* Convert the most recent 160x120 RGB565 camera frame (panda_scaled_data)
  * into an 80x80x3 HWC int8 tensor for TinyEngine MCUNet-VWW1 classifier.
  *
- * Center-crops to 120x120 (drops 20 columns from each side) to preserve aspect,
- * then nearest-neighbor downscales to 80x80 (1.5x).
+ * Full-frame bilinear resize 160x120 -> 80x80 (no crop; matches MCUNet
+ * eval_torch.py Resize((80,80)), which deliberately squashes aspect rather
+ * than cropping so off-center persons are preserved).
  * Per-pixel: RGB565 -> RGB888 -> (uint8 - 128) -> int8.
  *
  * @param src  Pointer to panda_scaled_data (size FRAME_BYTES).

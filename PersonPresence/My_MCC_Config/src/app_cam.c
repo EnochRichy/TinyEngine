@@ -261,8 +261,14 @@ void ov7670_init(void)
   I2C_Write(0x11, 0x80);        /* CLKRC: Prescaler /1 */
   I2C_Write(0x12, 0x14);        /* COM7: RGB mode + QVGA scaling enabled */
 
-   /* Auto-exposure and white balance */
-  I2C_Write(0x13, 0x81);        /* COM8: AEC (Auto Exposure Control) ON */
+   /* Auto-exposure, auto-gain, auto-white-balance */
+  I2C_Write(0x13, 0x87);        /* COM8: Fast AEC/AGC | AGC | AWB | AEC.
+                                 * Was 0x81 (only Fast + AEC), which left AWB
+                                 * and AGC OFF — produced a fixed color cast
+                                 * tied to the room illuminant and a fixed
+                                 * gain (manual 0x0B at reg 0x00) that misbehaved
+                                 * outside one lighting level. With AGC on, the
+                                 * sensor overrides the manual gain register. */
 
   I2C_Write(0x8C, 0x00);        /* RGB444: Disabled (use RGB565) */
 
@@ -405,43 +411,91 @@ void rgb565_to_gray64(void)
  * Source : panda_scaled_data, FRAME_BYTES = 160*120*2 little-endian RGB565.
  * Dest   : TinyEngine input buffer (getInput()), MODEL_IN_BYTES = 64*64*3.
  *
- * Aspect-preserving: center-crop the 160x120 frame to 120x120 (drop 20 cols on
- * each side), then nearest-neighbor downscale 120x120 -> 64x64.
- *   src_y = (dst_y * 120) / 64
- *   src_x = 20 + (dst_x * 120) / 64
+ * Mirrors MCUNet eval_torch.py preprocessing: full-frame Resize((64,64)) with
+ * bilinear interpolation (no center-crop), then per-pixel (uint8 - 128) -> int8.
+ * VWW training squashes the source aspect ratio non-uniformly into the 64x64
+ * input; the eval-script comment "if center crop, the person might be excluded"
+ * makes the no-crop choice deliberate.
  *
- * Per pixel: extract 5/6/5 -> 8/8/8, subtract 128 to map [0,255] -> [-128,127].
+ * Bilinear in Q8 fixed-point. Source position for output pixel n along an axis:
+ *   src_q8 = n * (IMG_DIM << 8) / MODEL_DIM
+ * Integer part = source index of the upper-left of the 2x2 footprint, low 8 bits
+ * = fractional weight in [0,255]. The 4 surrounding source pixels are RGB-565
+ * unpacked (with high-bit replication for full-range expansion) and blended.
+ *
  * Layout in dst: dst[((row*MODEL_IN_W) + col)*3 + {0:R,1:G,2:B}].
  * --------------------------------------------------------------------------*/
+static inline void rgb565_unpack(uint16_t pixel,
+                                 uint8_t *r8, uint8_t *g8, uint8_t *b8)
+{
+    uint8_t r5 = (pixel >> 11) & 0x1F;
+    uint8_t g6 = (pixel >>  5) & 0x3F;
+    uint8_t b5 =  pixel        & 0x1F;
+    *r8 = (uint8_t)((r5 << 3) | (r5 >> 2));
+    *g8 = (uint8_t)((g6 << 2) | (g6 >> 4));
+    *b8 = (uint8_t)((b5 << 3) | (b5 >> 2));
+}
+
 void rgb565_to_modelinput_vww(const uint8_t *src, signed char *dst)
 {
-    /* Center-crop offset: (IMG_WIDTH - IMG_HEIGHT) / 2 = (160-120)/2 = 20 */
-    const int crop_x_offset = (IMG_WIDTH - IMG_HEIGHT) / 2;
+    const int dx_q8 = (IMG_WIDTH  << 8) / MODEL_IN_W;   /* 160*256/64 = 640 */
+    const int dy_q8 = (IMG_HEIGHT << 8) / MODEL_IN_H;   /* 120*256/64 = 480 */
 
     for (int dst_y = 0; dst_y < MODEL_IN_H; dst_y++)
     {
-        int src_y = (dst_y * IMG_HEIGHT) / MODEL_IN_H;          /* 120/64 */
-        const uint8_t *row = &src[src_y * IMG_WIDTH * 2];
+        int sy_q8 = dst_y * dy_q8;
+        int sy0   = sy_q8 >> 8;
+        int fy    = sy_q8 & 0xFF;
+        int sy1   = sy0 + 1;
+        if (sy1 >= IMG_HEIGHT) sy1 = IMG_HEIGHT - 1;
+
+        const uint8_t *row0 = &src[sy0 * IMG_WIDTH * 2];
+        const uint8_t *row1 = &src[sy1 * IMG_WIDTH * 2];
         signed char *out_row = &dst[dst_y * MODEL_IN_W * MODEL_IN_C];
+
+        const int wy1 = fy;
+        const int wy0 = 256 - fy;
 
         for (int dst_x = 0; dst_x < MODEL_IN_W; dst_x++)
         {
-            int src_x = crop_x_offset + (dst_x * IMG_HEIGHT) / MODEL_IN_W;
-            uint16_t pixel = row[src_x*2] | ((uint16_t)row[src_x*2 + 1] << 8);
+            int sx_q8 = dst_x * dx_q8;
+            int sx0   = sx_q8 >> 8;
+            int fx    = sx_q8 & 0xFF;
+            int sx1   = sx0 + 1;
+            if (sx1 >= IMG_WIDTH) sx1 = IMG_WIDTH - 1;
 
-            uint8_t r5 = (pixel >> 11) & 0x1F;
-            uint8_t g6 = (pixel >> 5)  & 0x3F;
-            uint8_t b5 =  pixel        & 0x1F;
+            uint16_t p_tl = row0[sx0*2] | ((uint16_t)row0[sx0*2 + 1] << 8);
+            uint16_t p_tr = row0[sx1*2] | ((uint16_t)row0[sx1*2 + 1] << 8);
+            uint16_t p_bl = row1[sx0*2] | ((uint16_t)row1[sx0*2 + 1] << 8);
+            uint16_t p_br = row1[sx1*2] | ((uint16_t)row1[sx1*2 + 1] << 8);
 
-            /* 5/6-bit -> 8-bit replicating high bits into low for full range */
-            uint8_t r8 = (uint8_t)((r5 << 3) | (r5 >> 2));
-            uint8_t g8 = (uint8_t)((g6 << 2) | (g6 >> 4));
-            uint8_t b8 = (uint8_t)((b5 << 3) | (b5 >> 2));
+            uint8_t r_tl, g_tl, b_tl, r_tr, g_tr, b_tr;
+            uint8_t r_bl, g_bl, b_bl, r_br, g_br, b_br;
+            rgb565_unpack(p_tl, &r_tl, &g_tl, &b_tl);
+            rgb565_unpack(p_tr, &r_tr, &g_tr, &b_tr);
+            rgb565_unpack(p_bl, &r_bl, &g_bl, &b_bl);
+            rgb565_unpack(p_br, &r_br, &g_br, &b_br);
 
-            /* uint8 [0,255] -> int8 [-128,127] */
-            out_row[dst_x*3 + 0] = (signed char)((int)r8 - 128);
-            out_row[dst_x*3 + 1] = (signed char)((int)g8 - 128);
-            out_row[dst_x*3 + 2] = (signed char)((int)b8 - 128);
+            const int wx1 = fx;
+            const int wx0 = 256 - fx;
+
+            /* Per-channel bilinear: horizontal blend each row to Q8, then
+             * vertical blend to Q0. Max intermediate = 255*256*256 ≈ 16.7M,
+             * sum of two = ≈ 33.4M, comfortably within int32. */
+            int r_top = r_tl * wx0 + r_tr * wx1;
+            int g_top = g_tl * wx0 + g_tr * wx1;
+            int b_top = b_tl * wx0 + b_tr * wx1;
+            int r_bot = r_bl * wx0 + r_br * wx1;
+            int g_bot = g_bl * wx0 + g_br * wx1;
+            int b_bot = b_bl * wx0 + b_br * wx1;
+
+            int r = (r_top * wy0 + r_bot * wy1) >> 16;
+            int g = (g_top * wy0 + g_bot * wy1) >> 16;
+            int b = (b_top * wy0 + b_bot * wy1) >> 16;
+
+            out_row[dst_x*3 + 0] = (signed char)(r - 128);
+            out_row[dst_x*3 + 1] = (signed char)(g - 128);
+            out_row[dst_x*3 + 2] = (signed char)(b - 128);
         }
     }
 }

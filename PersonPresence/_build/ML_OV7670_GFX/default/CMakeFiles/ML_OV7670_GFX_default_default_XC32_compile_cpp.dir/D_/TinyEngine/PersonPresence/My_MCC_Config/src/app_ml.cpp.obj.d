@@ -142,5 +142,4 @@ CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile_cpp.dir/D_/TinyEngine/Pers
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\peripheral\port\plib_port.h \
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\device.h \
  D:/TinyEngine/PersonPresence/My_MCC_Config/src/TinyEngine/include/genNN.h \
- D:/TinyEngine/PersonPresence/My_MCC_Config/src/TinyEngine/include/yoloOutput.h \
- D:/TinyEngine/PersonPresence/My_MCC_Config/src/test_images.h
+ D:/TinyEngine/PersonPresence/My_MCC_Config/src/TinyEngine/include/yoloOutput.h
