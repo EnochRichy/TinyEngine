@@ -1,9 +1,7 @@
 /*******************************************************************************
   Application ML Header File (TinyEngine MCUNet-VWW0 person presence)
 
-  Visual Wake Words classifier API. Legacy gesture accessors are kept as
-  shims so that app_display.c keeps linking until its overlay is updated for
-  Person/NoPerson.
+  Visual Wake Words classifier API.
 *******************************************************************************/
 
 #ifndef _APP_ML_H
@@ -49,6 +47,14 @@ bool    APP_ML_GetPersonPresent(void);
 void    APP_ML_SetPersonPresent(bool present);
 /* Returns out[0] - out[1] (int8 logit margin). Positive = person. */
 int16_t APP_ML_GetLogitMargin(void);
+int8_t  APP_ML_GetPersonLogit(void);
+int8_t  APP_ML_GetNoPersonLogit(void);
+/* Wall-clock duration of the most recent invoke(), in microseconds. */
+uint32_t APP_ML_GetInferenceUs(void);
+/* Monotonic count of completed inferences, wraps at 256. The host uses
+ * increments to compute inference FPS — counting changes in inference_us
+ * undercounts when consecutive runs land on the same microsecond. */
+uint8_t  APP_ML_GetInferenceCount(void);
 
 /* PC-vs-MCU correlation harness. Fills getInput() with three deterministic
  * patterns (midgray / black / white) and prints the 2 output logits over
@@ -60,11 +66,6 @@ void APP_ML_RunSmokeTest(void);
  * runs invoke(), and prints the resulting logits + expected/actual decision.
  * Loops indefinitely; gated by ML_USE_TEST_IMAGES. */
 void APP_ML_RunImageTest(void);
-
-/* Legacy gesture-API shims (kept so app_display.c continues to compile).
- * Mapping: person -> 0, no person -> 1. */
-uint8_t APP_ML_GetIdentifiedGesture(void);
-void    APP_ML_SetIdentifiedGesture(uint8_t id);
 
 #ifdef __cplusplus
 }

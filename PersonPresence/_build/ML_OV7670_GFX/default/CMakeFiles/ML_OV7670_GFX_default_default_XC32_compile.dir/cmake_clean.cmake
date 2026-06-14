@@ -149,8 +149,6 @@ file(REMOVE_RECURSE
   "CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/TinyEngine/src/kernels/int_forward_op/upsample_byte.c.o.d"
   "CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.c.o"
   "CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.c.o.d"
-  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.o"
-  "CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.o.d"
   "CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_usb.c.o"
   "CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_usb.c.o.d"
   "CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/config/default/driver/i2c/src/drv_i2c.c.o"

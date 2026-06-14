@@ -130,7 +130,6 @@ CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPr
  c:\program\ files\microchip\xc32\v4.60\pic32c\include\musl\endian.h \
  c:\program\ files\microchip\xc32\v4.60\pic32c\include\musl\sys\select.h \
  c:\program\ files\microchip\xc32\v4.60\pic32c\include\musl\sys\sysmacros.h \
- D:/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.h \
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\definitions.h \
  c:\program\ files\microchip\xc32\v4.60\pic32c\include\musl\stdio.h \
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\gfx/driver/controller/lcc/drv_gfx_lcc.h \
@@ -258,5 +257,4 @@ CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPr
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\peripheral/tcc/plib_tcc9.h \
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\peripheral/tcc/plib_tcc7.h \
  d:\tinyengine\personpresence\my_mcc_config\src\app_usb.h \
- d:\tinyengine\personpresence\my_mcc_config\src\app_cam.h \
- d:\tinyengine\personpresence\my_mcc_config\src\app_display.h
+ d:\tinyengine\personpresence\my_mcc_config\src\app_cam.h

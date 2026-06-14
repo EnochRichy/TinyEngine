@@ -260,7 +260,6 @@ CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPr
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\peripheral/tcc/plib_tcc7.h \
  d:\tinyengine\personpresence\my_mcc_config\src\app_usb.h \
  d:\tinyengine\personpresence\my_mcc_config\src\app_cam.h \
- d:\tinyengine\personpresence\my_mcc_config\src\app_display.h \
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\driver\usb\usbhs\drv_usbhs.h \
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\driver\usb\usbhs\src\drv_usbhs_variant_mapping.h \
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\interrupts.h

@@ -26,6 +26,7 @@
 
 #include "app_cam.h"
 #include "peripheral/port/plib_port.h"
+#include "system/time/sys_time.h"
 
 extern "C" {
     /* genNN.h declares getInput/getOutput/invoke. It also declares legacy
@@ -45,9 +46,10 @@ extern APP_CAM_DATA app_camData;
 static volatile bool    s_inference_complete = true;
 static volatile bool    s_person_present = false;
 static volatile int16_t s_logit_margin = 0;   /* out[0] - out[1], int8 range */
-
-/* Legacy mapping kept for app_display.c: 0 = person, 1 = no person. */
-static volatile uint8_t s_identified_gesture_local = 1;
+static volatile int8_t  s_person_logit = 0;
+static volatile int8_t  s_noperson_logit = 0;
+static volatile uint32_t s_inference_us = 0;  /* wall-clock duration of last invoke() */
+static volatile uint8_t  s_inference_count = 0; /* increments after each run, wraps at 256 */
 
 
 /******************************************************************************
@@ -56,7 +58,6 @@ static volatile uint8_t s_identified_gesture_local = 1;
 
 static void run_person_classification(void)
 {
-    TEST_PIN_Set();
     s_inference_complete = false;
     app_camData.processed_frame_data_ready = false;
 
@@ -88,10 +89,14 @@ static void run_person_classification(void)
         }
     }
 
-    /* Step 2: run the generated graph. */
-
+    /* Step 2: run the generated graph (wall-clock timed). SYS_TIME source is
+     * the 32-bit RTC timer set up by Harmony; SYS_TIME_FrequencyGet() reports
+     * its tick rate. 32-bit subtraction handles counter rollover correctly. */
+    uint32_t t0 = SYS_TIME_CounterGet();
     invoke(NULL);
-    
+    uint32_t t1 = SYS_TIME_CounterGet();
+    s_inference_us = (uint32_t)(((uint64_t)(t1 - t0) * 1000000ULL)
+                                / SYS_TIME_FrequencyGet());
 
     /* Step 3: argmax on the 2 int8 logits (out[0]=no-person, out[1]=person). */
     const signed char* out = getOutput();
@@ -100,14 +105,16 @@ static void run_person_classification(void)
     bool present = (person_logit > noperson_logit);
 
     APP_ML_SetPersonPresent(present);
+    s_person_logit   = person_logit;
+    s_noperson_logit = noperson_logit;
     s_logit_margin = (int16_t)((int)person_logit - (int)noperson_logit);
 
     printf("Person: %s  logits=[%d, %d]  margin=%d\r\n",
            present ? "YES" : "no ",
            (int)person_logit, (int)noperson_logit, (int)s_logit_margin);
 
+    s_inference_count = (uint8_t)(s_inference_count + 1u);
     s_inference_complete = true;
-    TEST_PIN_Clear();
 }
 
 
@@ -136,7 +143,9 @@ void APP_ML_Tasks(void)
 
         case APP_ML_STATE_SERVICE_TASKS:
             if (app_camData.processed_frame_data_ready) {
+                TEST_PIN_Set();
                 run_person_classification();
+                TEST_PIN_Clear();
             }
             break;
 
@@ -171,9 +180,6 @@ bool APP_ML_GetPersonPresent(void)
 void APP_ML_SetPersonPresent(bool present)
 {
     s_person_present = present;
-    /* Mirror to the legacy gesture id so app_display.c keeps rendering
-     * something sensible until the overlay is updated. */
-    s_identified_gesture_local = present ? 0u : 1u;
 }
 
 int16_t APP_ML_GetLogitMargin(void)
@@ -181,14 +187,24 @@ int16_t APP_ML_GetLogitMargin(void)
     return s_logit_margin;
 }
 
-uint8_t APP_ML_GetIdentifiedGesture(void)
+int8_t APP_ML_GetPersonLogit(void)
 {
-    return (uint8_t)s_identified_gesture_local;
+    return (int8_t)s_person_logit;
 }
 
-void APP_ML_SetIdentifiedGesture(uint8_t id)
+int8_t APP_ML_GetNoPersonLogit(void)
 {
-    s_identified_gesture_local = id;
+    return (int8_t)s_noperson_logit;
+}
+
+uint32_t APP_ML_GetInferenceUs(void)
+{
+    return s_inference_us;
+}
+
+uint8_t APP_ML_GetInferenceCount(void)
+{
+    return s_inference_count;
 }
 
 
@@ -254,7 +270,6 @@ static void image_test_hold(void)
 
 void APP_ML_RunImageTest(void)
 {
-    TEST_PIN_Set();
     s_inference_complete = false;
     printf("---- TinyEngine VWW image test (%d images) ----\r\n",
            test_images_count);
@@ -280,8 +295,6 @@ void APP_ML_RunImageTest(void)
 
         printf("img[%-20s] logits=[np=%d, p=%d] margin=%d expected=%s decision=%s %s\r\n",
                t->name, np, p, margin, exp_str, act_str, verdict);
-
-        TEST_PIN_Clear();
 
        // image_test_hold();
     }

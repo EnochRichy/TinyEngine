@@ -257,6 +257,4 @@ CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPr
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\peripheral/tcc/plib_tcc7.h \
  d:\tinyengine\personpresence\my_mcc_config\src\app_usb.h \
  d:\tinyengine\personpresence\my_mcc_config\src\app_cam.h \
- d:\tinyengine\personpresence\my_mcc_config\src\app_display.h \
- D:/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.h \
- D:/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.h
+ D:/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.h

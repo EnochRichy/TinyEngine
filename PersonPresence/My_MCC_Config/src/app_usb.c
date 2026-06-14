@@ -29,6 +29,7 @@
 
 #include "app_usb.h"
 #include "app_cam.h"
+#include "app_ml.h"
 
 // *****************************************************************************
 // *****************************************************************************
@@ -62,13 +63,23 @@ uint8_t  transmitDataBuffer[512] CACHE_ALIGN;
 
 extern APP_CAM_DATA app_camData;
 
-// greyscale image is provided by the camera module; use APP_Cam_GetGreyscaleImg()
+/* Camera RGB565 frame is provided by the camera module via
+ * APP_Cam_GetRGB565Frame() (160x120 little-endian RGB565, 38400 bytes). */
 
-#define FRAME_WIDTH          64
-#define FRAME_HEIGHT         64
-#define FRAME_BPP            1
-#define FRAME_PAYLOAD_SIZE   (FRAME_WIDTH * FRAME_HEIGHT * FRAME_BPP)   // 4096
-#define FRAME_HEADER_SIZE    8
+#define FRAME_WIDTH          IMG_WIDTH                                  // 160
+#define FRAME_HEIGHT         IMG_HEIGHT                                 // 120
+#define FRAME_BPP            2                                          // RGB565
+#define FRAME_PAYLOAD_SIZE   FRAME_BYTES                                // 38400
+/* Header layout (little-endian):
+ *   [0..3]   marker AA 55 AA 55
+ *   [4..7]   frame counter (u32)
+ *   [8]      person flag (1 = person, 0 = no person)
+ *   [9]      person logit (int8)
+ *   [10]     no-person logit (int8)
+ *   [11]     inference counter (u8, wraps at 256) — host uses increments
+ *            to compute inference FPS
+ *   [12..15] last inference duration in microseconds (u32) */
+#define FRAME_HEADER_SIZE    16
 #define FRAME_PACKET_SIZE    512
 #define FRAME_NUM_PACKETS    (FRAME_PAYLOAD_SIZE / FRAME_PACKET_SIZE)   // 75
 
@@ -97,7 +108,6 @@ void APP_USBDeviceEventHandler(USB_DEVICE_EVENT event, void * eventData, uintptr
         case USB_DEVICE_EVENT_DECONFIGURED:
 
             /* Device is reset or deconfigured. Provide LED indication.*/
-            LED0_Set();
 
             app_usbData.deviceIsConfigured = false;
 
@@ -109,9 +119,6 @@ void APP_USBDeviceEventHandler(USB_DEVICE_EVENT event, void * eventData, uintptr
             configurationValue = (uint8_t *)eventData;
             if(*configurationValue == 1 )
             {
-                /* The device is in configured state. Update LED indication */
-                LED0_Clear();
-
                 /* Reset endpoint data send & receive flag  */
                 app_usbData.deviceIsConfigured = true;
             }
@@ -119,7 +126,6 @@ void APP_USBDeviceEventHandler(USB_DEVICE_EVENT event, void * eventData, uintptr
 
         case USB_DEVICE_EVENT_SUSPENDED:
 
-			      LED0_Set();
             /* Device is suspended. */ 
             break;
 
@@ -134,7 +140,6 @@ void APP_USBDeviceEventHandler(USB_DEVICE_EVENT event, void * eventData, uintptr
 
             /* VBUS is removed. Detach the device */
             USB_DEVICE_Detach (app_usbData.usbDevHandle);
-            LED0_Clear();
             break;
 
         case USB_DEVICE_EVENT_CONTROL_TRANSFER_SETUP_REQUEST:
@@ -181,7 +186,7 @@ void APP_USBDeviceEventHandler(USB_DEVICE_EVENT event, void * eventData, uintptr
                     app_usbData.usbDevHandle,
                     &app_usbData.writeTranferHandle,
                     app_usbData.endpointTx,
-                    (void *)(APP_Cam_GetGreyscaleImg() + (txPacketIndex * FRAME_PACKET_SIZE)),
+                    (void *)(APP_Cam_GetRGB565Frame() + (txPacketIndex * FRAME_PACKET_SIZE)),
                     FRAME_PACKET_SIZE,
                     flags
                 );
@@ -201,7 +206,6 @@ void APP_USBDeviceEventHandler(USB_DEVICE_EVENT event, void * eventData, uintptr
         case USB_DEVICE_EVENT_RESUMED:
             if(app_usbData.deviceIsConfigured == true)
             {
-                LED0_Clear();
             }
             break;
         case USB_DEVICE_EVENT_ERROR:
@@ -343,7 +347,7 @@ void APP_USB_Tasks (void )
 
               if (app_camData.frame_ready) {
 
-                // Build header: marker + frame counter (little endian)
+                // Build header: marker + frame counter + ML decision + timing
                 frameHeader[0] = 0xAA;
                 frameHeader[1] = 0x55;
                 frameHeader[2] = 0xAA;
@@ -354,6 +358,20 @@ void APP_USB_Tasks (void )
                 frameHeader[5] = (uint8_t)((cnt >> 8) & 0xFF);
                 frameHeader[6] = (uint8_t)((cnt >> 16) & 0xFF);
                 frameHeader[7] = (uint8_t)((cnt >> 24) & 0xFF);
+
+                /* Latch the most recent ML state alongside the frame so the
+                 * host sees decision + frame as one atomic record. The values
+                 * lag the displayed pixels by exactly one inference cycle. */
+                frameHeader[8]  = APP_ML_GetPersonPresent() ? 1u : 0u;
+                frameHeader[9]  = (uint8_t)APP_ML_GetPersonLogit();
+                frameHeader[10] = (uint8_t)APP_ML_GetNoPersonLogit();
+                frameHeader[11] = APP_ML_GetInferenceCount();
+
+                uint32_t inf_us = APP_ML_GetInferenceUs();
+                frameHeader[12] = (uint8_t)(inf_us & 0xFF);
+                frameHeader[13] = (uint8_t)((inf_us >>  8) & 0xFF);
+                frameHeader[14] = (uint8_t)((inf_us >> 16) & 0xFF);
+                frameHeader[15] = (uint8_t)((inf_us >> 24) & 0xFF);
 
                 streamingInProgress        = true;
                 txPacketIndex              = 0;            // next: payload packet 0

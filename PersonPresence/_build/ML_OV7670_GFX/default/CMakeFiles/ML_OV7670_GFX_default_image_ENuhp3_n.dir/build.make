@@ -140,7 +140,6 @@ ML_OV7670_GFX_default_image_ENuhp3_n_EXTERNAL_OBJECTS = \
 "D:/TinyEngine/PersonPresence/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/TinyEngine/src/kernels/int_forward_op/stable_softmax.c.o" \
 "D:/TinyEngine/PersonPresence/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/TinyEngine/src/kernels/int_forward_op/upsample_byte.c.o" \
 "D:/TinyEngine/PersonPresence/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.c.o" \
-"D:/TinyEngine/PersonPresence/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.o" \
 "D:/TinyEngine/PersonPresence/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_usb.c.o" \
 "D:/TinyEngine/PersonPresence/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/config/default/driver/i2c/src/drv_i2c.c.o" \
 "D:/TinyEngine/PersonPresence/_build/ML_OV7670_GFX/default/CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/config/default/driver/input/drv_maxtouch.c.o" \
@@ -516,7 +515,6 @@ default.elf: CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/4fca8a172
 default.elf: CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/TinyEngine/src/kernels/int_forward_op/stable_softmax.c.o
 default.elf: CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/TinyEngine/src/kernels/int_forward_op/upsample_byte.c.o
 default.elf: CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.c.o
-default.elf: CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.o
 default.elf: CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_usb.c.o
 default.elf: CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/config/default/driver/i2c/src/drv_i2c.c.o
 default.elf: CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/config/default/driver/input/drv_maxtouch.c.o

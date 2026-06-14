@@ -87,8 +87,6 @@
                 "My_MCC_Config/src/main.c",
                 "My_MCC_Config/src/app_cam.c",
                 "My_MCC_Config/src/app_cam.h",
-                "My_MCC_Config/src/app_display.c",
-                "My_MCC_Config/src/app_display.h",
                 "My_MCC_Config/src/app_usb.c",
                 "My_MCC_Config/src/app_usb.h",
                 "My_MCC_Config/src/app_ml.cpp",

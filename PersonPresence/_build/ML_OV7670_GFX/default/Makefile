@@ -1968,30 +1968,6 @@ D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/build.make CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.c.s
 .PHONY : D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.c.s
 
-D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.o: D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.o
-.PHONY : D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.o
-
-# target to build an object file
-D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/build.make CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.o
-.PHONY : D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.o
-
-D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.i: D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.i
-.PHONY : D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.i
-
-# target to preprocess a source file
-D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/build.make CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.i
-.PHONY : D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.i
-
-D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.s: D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.s
-.PHONY : D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.s
-
-# target to generate assembly for a file
-D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/build.make CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile.dir/D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.s
-.PHONY : D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.c.s
-
 D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_ml.obj: D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_ml.cpp.obj
 .PHONY : D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_ml.obj
 
@@ -9405,9 +9381,6 @@ help:
 	@echo "... D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.o"
 	@echo "... D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.i"
 	@echo "... D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.s"
-	@echo "... D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.o"
-	@echo "... D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.i"
-	@echo "... D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_display.s"
 	@echo "... D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_ml.obj"
 	@echo "... D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_ml.i"
 	@echo "... D_/TinyEngine/PersonPresence/My_MCC_Config/src/app_ml.s"

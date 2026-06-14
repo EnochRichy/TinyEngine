@@ -141,5 +141,14 @@ CMakeFiles/ML_OV7670_GFX_default_default_XC32_compile_cpp.dir/D_/TinyEngine/Pers
  D:/TinyEngine/PersonPresence/My_MCC_Config/src/app_cam.h \
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\peripheral\port\plib_port.h \
  d:\tinyengine\personpresence\my_mcc_config\src\config\default\device.h \
+ d:\tinyengine\personpresence\my_mcc_config\src\config\default\system\time\sys_time.h \
+ d:\tinyengine\personpresence\my_mcc_config\src\config\default\system\system.h \
+ d:\tinyengine\personpresence\my_mcc_config\src\config\default\system\system_common.h \
+ c:\program\ files\microchip\xc32\v4.60\pic32c\include\musl\assert.h \
+ d:\tinyengine\personpresence\my_mcc_config\src\config\default\system\system_module.h \
+ d:\tinyengine\personpresence\my_mcc_config\src\config\default\system\system_common.h \
+ d:\tinyengine\personpresence\my_mcc_config\src\config\default\system\time\sys_time_definitions.h \
+ d:\tinyengine\personpresence\my_mcc_config\src\config\default\system\int\sys_int.h \
+ d:\tinyengine\personpresence\my_mcc_config\src\config\default\system\int\sys_int_mapping.h \
  D:/TinyEngine/PersonPresence/My_MCC_Config/src/TinyEngine/include/genNN.h \
  D:/TinyEngine/PersonPresence/My_MCC_Config/src/TinyEngine/include/yoloOutput.h

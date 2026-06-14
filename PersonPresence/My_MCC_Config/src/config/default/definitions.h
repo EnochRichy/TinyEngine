@@ -79,7 +79,6 @@
 #include "peripheral/tcc/plib_tcc7.h"
 #include "app_usb.h"
 #include "app_cam.h"
-#include "app_display.h"
 
 
 

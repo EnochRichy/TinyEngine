@@ -527,12 +527,12 @@ void SYS_Initialize ( void* data )
     /* MISRA C-2012 Rule 11.8 - Deviation record ID - H3_MISRAC_2012_R_11_8_DR_1 */
 
     /* Initialize I2C0 Driver Instance */
-    sysObj.drvI2C0 = DRV_I2C_Initialize(DRV_I2C_INDEX_0, (SYS_MODULE_INIT *)&drvI2C0InitData);
+    // sysObj.drvI2C0 = DRV_I2C_Initialize(DRV_I2C_INDEX_0, (SYS_MODULE_INIT *)&drvI2C0InitData);
 
-    DRV_LCC_Initialize();
+    // DRV_LCC_Initialize();
 
 
-    sysObj.drvMAXTOUCH = DRV_MAXTOUCH_Initialize(0, (SYS_MODULE_INIT *)&drvMAXTOUCHInitData);
+    // sysObj.drvMAXTOUCH = DRV_MAXTOUCH_Initialize(0, (SYS_MODULE_INIT *)&drvMAXTOUCHInitData);
 
 
     /* MISRA C-2012 Rule 11.3, 11.8 deviated below. Deviation record ID -  
@@ -542,7 +542,7 @@ void SYS_Initialize ( void* data )
     
     /* MISRAC 2012 deviation block end */
 
-    SYS_INP_Init();
+   // SYS_INP_Init();
 
 
 
@@ -554,13 +554,13 @@ void SYS_Initialize ( void* data )
     sysObj.drvUSBHSObject0 = DRV_USBHS_Initialize(DRV_USBHS_INDEX_0, (SYS_MODULE_INIT *) &drvUSBHSInit0);    
 
     // initialize UI library
-    Legato_Initialize();
+    //Legato_Initialize();
 
 
     /* MISRAC 2012 deviation block end */
     APP_USB_Initialize();
     APP_CAM_Initialize();
-    APP_DISPLAY_Initialize();
+   // APP_DISPLAY_Initialize();
     APP_ML_Initialize();
 
 

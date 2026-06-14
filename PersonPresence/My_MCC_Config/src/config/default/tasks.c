@@ -73,15 +73,6 @@
 void SYS_Tasks ( void )
 {
     /* Maintain system services */
-    
-
-    /* Maintain Device Drivers */
-        DRV_LCC_Update();
-
-
-    DRV_MAXTOUCH_Tasks(sysObj.drvMAXTOUCH);
-
-
 
     /* Maintain Middleware & Other Libraries */
         /* USB Device layer tasks routine */ 
@@ -89,14 +80,6 @@ void SYS_Tasks ( void )
 
     /* USBHS Driver Task Routine */ 
     DRV_USBHS_Tasks(sysObj.drvUSBHSObject0);
-
-
-    Legato_Tasks();
-
-
-    SYS_INP_Tasks();
-
-
 
     /* Maintain the application's state machine. */
         /* Call Application task APP_USB. */

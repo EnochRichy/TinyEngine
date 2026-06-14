@@ -186,10 +186,7 @@ void APP_CAM_Tasks( void );
 #define MODEL_IN_BYTES (MODEL_IN_H * MODEL_IN_W * MODEL_IN_C)
 
 // Accessors
-const uint8_t *APP_Cam_GetGreyscaleImg(void);
 const uint8_t *APP_Cam_GetRGB565Frame(void);
-uint8_t APP_Cam_GetIdentifiedGesture(void);
-void APP_Cam_SetIdentifiedGesture(uint8_t id);
 
 /* Convert the most recent 160x120 RGB565 camera frame (panda_scaled_data)
  * into a 64x64x3 HWC int8 tensor for TinyEngine MCUNet-VWW0 classifier.

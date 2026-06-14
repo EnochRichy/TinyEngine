@@ -28,7 +28,6 @@
 // *****************************************************************************
 
 #include "app_cam.h"
-#include "app_display.h"
 #include "definitions.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -46,49 +45,13 @@
 /* Camera frame layout (QQVGA RGB565: 160x120) */
 #define CAM_LINE_BYTES              (IMG_WIDTH * 2)
 
-/* ML inference input size (grayscale downsampled) */
-#define ML_IMG_W                    64
-#define ML_IMG_H                    64
-
 /* Busy-wait loop iterations for timing (conservative approximation) */
 #define I2C_WRITE_DELAY_LOOPS       100000
 
-/* Extern buffers (provided by display module) */
-extern uint8_t panda_scaled_data[FRAME_BYTES];      /* DMA target: raw RGB565 frame */
-extern APP_DISPLAY_DATA app_displayData;
-
-/* Module-local: 64x64 grayscale image for ML inference */
-static uint8_t greyscale_img_local[ML_IMG_W * ML_IMG_H];
-
-/* ============================================================================
- * Gamma Correction Tables (for color display rendering)
- * ============================================================================ */
-
-/**
- * gamma5 - Standard gamma curve for 5-bit color values
- *
- * Maps 5-bit input (0-31) to 8-bit output (0-255) with gamma correction.
- * Applied to R/G/B channels before HUB75 panel DMA.
- */
-static const uint8_t gamma5[32] = {
-    0,0,0,0,1,1,2,3,
-    4,5,7,9,11,13,15,17,
-    19,21,23,25,27,28,29,30,
-    31,31,31,31,31,31,31,31
-};
-
-/**
- * gamma5_boosted - Enhanced gamma curve for brighter display
- *
- * Maps 5-bit input (0-31) to 8-bit output (0-255) with more aggressive
- * gamma adjustment for panels requiring higher brightness.
- */
-static const uint8_t gamma5_boosted[32] = {
-    0,0,0,0,0,1,1,2,
-    3,4,6,8,10,12,14,16,
-    18,20,22,24,26,27,28,29,
-    30,30,31,31,31,31,31,31
-};
+/* RGB565 camera DMA target. Defined by the MCC-generated Legato image
+ * asset le_gen_images.c (38400 bytes); we just reuse the symbol so the
+ * camera DMA, USB stream, and ML preprocessor all share one buffer. */
+extern uint8_t panda_scaled_data[FRAME_BYTES];
 
 
 // *****************************************************************************
@@ -316,95 +279,6 @@ void ov7670_init(void)
 }
 
 
-/* ============================================================================
- * Frame Processing: RGB565 → Grayscale Conversion
- * ============================================================================ */
-
-/**
- * rgb565_to_gray64 - Convert incoming 160x120 RGB565 frame to 64x64 grayscale
- *
- * Downsamples the raw camera frame from panda_scaled_data buffer (QQVGA RGB565)
- * into a 64x64 grayscale image suitable for ML inference. Also populates
- * display color buffers (buffer_R/G/B) for HUB75 overlay rendering.
- *
- * Conversion pipeline:
- *   1. Fixed-point scaling factors compute source pixel coordinates
- *   2. RGB565 pixel extracted and unpacked to 8-bit R/G/B values
- *   3. Grayscale luminance computed: Y = 0.299R + 0.587G + 0.114B
- *   4. Results stored to greyscale_img_local[64x64]
- *   5. Scaled RGB values written to display buffers with gamma correction
- *
- * Gating:
- *   Skips conversion if inference_complete is false (protects ML input during inference).
- */
-void rgb565_to_gray64(void)
-{
-    /* Fixed-point scaling factors (multiply by 1000 to avoid floating-point) */
-    const int x_scale = (IMG_WIDTH * 1000) / ML_IMG_W;   /* (160 * 1000) / 64 = 2500 */
-    const int y_scale = (IMG_HEIGHT * 1000) / ML_IMG_H;  /* (120 * 1000) / 64 = 1875 */
-
-    // if( APP_ML_IsInferenceComplete() == false)
-    // {
-    //     /* Skip conversion while ML engine is reading the current frame */
-    //     return;
-    // }
-
-    for (int dst_y = 0; dst_y < ML_IMG_H; dst_y++)
-    {
-        int src_y = (dst_y * y_scale) / 1000;
-
-        for (int dst_x = 0; dst_x < ML_IMG_W; dst_x++)
-        {
-            int src_x = (dst_x * x_scale) / 1000;
-
-            /* Compute source pixel index in RGB565 frame */
-            int src_index = (src_y * IMG_WIDTH + src_x) * 2;
-
-            /* Extract RGB565 pixel (little-endian: low byte = RRRGGGbb, high byte = GGGbbbbb) */
-            uint16_t pixel = panda_scaled_data[src_index] | (panda_scaled_data[src_index + 1] << 8);
-
-            /* Unpack 5-bit R, 6-bit G, 5-bit B values */
-            uint8_t r_5bit = (pixel >> 11) & 0x1F;
-            uint8_t g_6bit = (pixel >> 5)  & 0x3F;
-            uint8_t b_5bit = (pixel      ) & 0x1F;
-
-            /* Scale to 8-bit range */
-            uint8_t r_8bit = r_5bit << 3;  /* 5-bit → 8-bit: multiply by 8 */
-            uint8_t g_8bit = g_6bit << 2;  /* 6-bit → 8-bit: multiply by 4 */
-            uint8_t b_8bit = b_5bit << 3;  /* 5-bit → 8-bit: multiply by 8 */
-
-            /* Compute grayscale luminance: Y = 0.299R + 0.587G + 0.114B */
-            /* Using integer approximation: (30R + 59G + 11B) / 100 */
-            uint8_t grayscale = (r_8bit * 30 + g_8bit * 59 + b_8bit * 11) / 100;
-
-            /* Store grayscale value for ML inference */
-            greyscale_img_local[dst_y * ML_IMG_W + dst_x] = grayscale;
-
-            /* Also populate display buffers with scaled RGB values */
-            r_5bit = (pixel >> 11) & 0x1F;
-            /* Convert 6-bit green to 5-bit by shifting (approx) */
-            uint8_t g_5bit = (pixel >> 6)  & 0x1F;  /* Convert 6-bit to 5-bit */
-            b_5bit =  pixel        & 0x1F;
-
-            /* Scale in 6-bit space to avoid overflow, then apply gamma */
-            uint8_t r_scaled = (r_5bit * 36) >> 5;   /* ~1.06x boost */
-            uint8_t g_scaled = (g_5bit * 28) >> 5;   /* ~0.81x boost */
-            uint8_t b_scaled = (b_5bit * 40) >> 5;   /* ~1.19x boost */
-
-            /* Clamp to 5-bit range before gamma lookup */
-            if (r_scaled > 31) r_scaled = 31;
-            if (g_scaled > 31) g_scaled = 31;
-            if (b_scaled > 31) b_scaled = 31;
-
-            app_displayData.buffer_R[dst_y][dst_x] = gamma5[r_scaled];
-            app_displayData.buffer_G[dst_y][dst_x] = gamma5[g_scaled];
-            app_displayData.buffer_B[dst_y][dst_x] = gamma5[b_scaled];
-
-            app_camData.processed_frame_data_ready = true;
-        }
-    }
-}
-
 /* ----------------------------------------------------------------------------
  * rgb565_to_modelinput_vww - 160x120 RGB565 -> 64x64 RGB int8 (HWC) for VWW
  *
@@ -505,20 +379,6 @@ void rgb565_to_modelinput_vww(const uint8_t *src, signed char *dst)
  * ============================================================================ */
 
 /**
- * APP_Cam_GetGreyscaleImg - Return pointer to 64x64 grayscale image buffer
- *
- * Returns pointer to module-owned grayscale image (64x64 uint8_t array).
- * Valid immediately after APP_Cam_HandleFrame returns true.
- *
- * Returns:
- *   Pointer to static 64x64 grayscale image (uint8_t[4096])
- */
-const uint8_t *APP_Cam_GetGreyscaleImg(void)
-{
-    return greyscale_img_local;
-}
-
-/**
  * APP_Cam_GetRGB565Frame - Return pointer to the raw 160x120 RGB565 frame.
  *
  * Frame contents are valid after the camera DMA / VSYNC handler has populated
@@ -599,14 +459,13 @@ void APP_CAM_Tasks ( void )
 
             if (app_camData.frame_ready)
             {
-                /* Process the captured frame */
-                /* Clear flag and perform conversion */
                 app_camData.frame_ready = false;
-                rgb565_to_gray64();
-                legato_showScreen(screenID_Screen0);
-                /* Ensure cache coherency for camera frame buffer (if applicable) */
+                /* Cache-clean the DMA'd frame so the CPU (ML preprocessor and
+                 * USB endpoint write) sees fresh pixels, then signal the ML
+                 * task that a new frame is available. */
                 DCACHE_CLEAN_BY_ADDR((uint32_t *)panda_scaled_data, APP_Cam_GetFrameBytes());
-            }         
+                app_camData.processed_frame_data_ready = true;
+            }
 
             break;
         }
