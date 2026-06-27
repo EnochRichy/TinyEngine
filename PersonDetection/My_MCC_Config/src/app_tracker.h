@@ -30,10 +30,22 @@ extern "C" {
 #define TRK_MAX_MISSES  3        /* ~1 s at 3 FPS */
 #define TRK_IOU_GATE    0.30f
 
+/* Tripwire line-crossing counter config. Coordinates are camera-space
+ * (160x120). Change here and rebuild firmware + restart dashboard.
+ *   VERTICAL = 0  -> horizontal line at y = POS, IN = top-to-bottom
+ *   VERTICAL = 1  -> vertical line   at x = POS, IN = left-to-right
+ * DEADBAND is the hysteresis half-width: a track sitting inside
+ * [POS-DEADBAND, POS+DEADBAND] holds its previous side, so a person
+ * jittering on the line cannot rack up phantom counts. */
+#define TRK_TRIPWIRE_VERTICAL   1
+#define TRK_TRIPWIRE_POS        80
+#define TRK_TRIPWIRE_DEADBAND   3
+
 typedef struct {
     int      id;
     int8_t   active;
     uint8_t  miss_count;
+    int8_t   prev_side;     /* -1 = before line, +1 = after, 0 = unseeded */
     det_box  box;
 } track_t;
 
@@ -48,6 +60,10 @@ void APP_TRK_Update(const det_box *detections, int n);
 
 /* Returns the underlying track table. Caller filters by .active. */
 const track_t *APP_TRK_GetTracks(int *active_count_out);
+
+/* Cumulative tripwire crossing counts since boot. IN = -1 -> +1 transition,
+ * OUT = +1 -> -1 transition. Either pointer may be NULL. */
+void APP_TRK_GetCounts(uint32_t *count_in, uint32_t *count_out);
 
 #ifdef __cplusplus
 }

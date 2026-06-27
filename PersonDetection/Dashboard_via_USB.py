@@ -2,9 +2,11 @@
 PersonDetection ML inference dashboard.
 
 Reads the augmented USB stream from My_MCC_Config (16-byte header + 38400-byte
-RGB565 payload + 96-byte tracker trailer) and renders a single OpenCV window
-with:
+RGB565 payload + 96-byte tracker trailer + 8-byte tripwire counter block) and
+renders a single OpenCV window with:
   - upscaled live video with per-ID bounding-box overlays
+  - tripwire activation line + deadband band overlay
+  - IN / OUT / NET counts HUD
   - "Tracks: N" badge + raw-detection diagnostic
   - live metrics: stream FPS, inference time, inference FPS, frame counter
   - static model info: MCUNet person-det name, shape, head config
@@ -61,7 +63,13 @@ TRK_TRAILER_SLOTS  = 8
 TRK_TRAILER_RECSIZE = 12
 TRK_TRAILER_SIZE   = TRK_TRAILER_SLOTS * TRK_TRAILER_RECSIZE  # 96
 
-FRAME_PAYLOAD_SIZE = FRAME_RGB565_SIZE + TRK_TRAILER_SIZE     # 38496
+# Tripwire counter + config block (see app_usb.c COUNTER_BLOCK):
+#   u32 count_in, u32 count_out, u8 vertical, u8 pos, u8 deadband, u8 reserved.
+# Config arrives every frame so the dashboard always matches firmware -- no
+# need to edit Python when TRK_TRIPWIRE_* changes in app_tracker.h.
+COUNTER_BLOCK_SIZE = 12
+
+FRAME_PAYLOAD_SIZE = FRAME_RGB565_SIZE + TRK_TRAILER_SIZE + COUNTER_BLOCK_SIZE  # 38508
 
 # Firmware now sends box coords in camera-space (model 96x96 center-cropped
 # from camera 160x120, with the crop offset added on the firmware side).
@@ -165,8 +173,17 @@ def read_frame(dev, leftover: bytearray):
             return None, None, None, bytearray()
 
     rgb565 = bytes(payload[:FRAME_RGB565_SIZE])
-    trailer = bytes(payload[FRAME_RGB565_SIZE:FRAME_PAYLOAD_SIZE])
+    trailer = bytes(payload[FRAME_RGB565_SIZE:FRAME_RGB565_SIZE + TRK_TRAILER_SIZE])
     tracks = parse_trailer(trailer)
+    counter_off = FRAME_RGB565_SIZE + TRK_TRAILER_SIZE
+    count_in, count_out, tw_vert, tw_pos, tw_db, _ = struct.unpack(
+        "<IIBBBB", bytes(payload[counter_off:counter_off + COUNTER_BLOCK_SIZE])
+    )
+    meta["count_in"]      = int(count_in)
+    meta["count_out"]     = int(count_out)
+    meta["tw_vertical"]   = int(tw_vert)
+    meta["tw_pos"]        = int(tw_pos)
+    meta["tw_deadband"]   = int(tw_db)
     new_leftover = bytearray(payload[FRAME_PAYLOAD_SIZE:])
     return meta, rgb565, tracks, new_leftover
 
@@ -192,6 +209,7 @@ COL_DIM      = (150, 150, 150)
 COL_TRACKS   = (60, 200, 60)
 COL_NONE     = (90, 90, 90)
 COL_ACCENT   = (200, 160, 60)
+COL_TRIPWIRE = (0, 220, 220)   # yellow -- distinct from per-ID box colours
 
 
 def id_to_colour(track_id: int):
@@ -258,6 +276,47 @@ def enhance_video(video_bgr):
     return sharp
 
 
+def draw_tripwire(canvas_video, vertical, pos, deadband):
+    """Draw the activation line and deadband band on the upscaled canvas.
+
+    Config (vertical/pos/deadband) is read fresh each frame from the USB
+    counter block, so the dashboard auto-matches whatever the firmware was
+    built with."""
+    sx = VIDEO_W / FRAME_WIDTH
+    sy = VIDEO_H / FRAME_HEIGHT
+    if vertical:
+        x  = int(pos * sx)
+        xd = int(deadband * sx)
+        overlay = canvas_video.copy()
+        cv2.rectangle(overlay, (x - xd, 0), (x + xd, VIDEO_H - 1),
+                      COL_TRIPWIRE, -1)
+        cv2.addWeighted(overlay, 0.18, canvas_video, 0.82, 0, dst=canvas_video)
+        cv2.line(canvas_video, (x, 0), (x, VIDEO_H - 1), COL_TRIPWIRE, 1)
+    else:
+        y  = int(pos * sy)
+        yd = int(deadband * sy)
+        overlay = canvas_video.copy()
+        cv2.rectangle(overlay, (0, y - yd), (VIDEO_W - 1, y + yd),
+                      COL_TRIPWIRE, -1)
+        cv2.addWeighted(overlay, 0.18, canvas_video, 0.82, 0, dst=canvas_video)
+        cv2.line(canvas_video, (0, y), (VIDEO_W - 1, y), COL_TRIPWIRE, 1)
+
+
+def draw_counts_hud(canvas_video, count_in, count_out):
+    """Top-left HUD: IN / OUT / NET, sized to read at presentation distance."""
+    net = count_in - count_out
+    lines = [
+        (f"IN  {count_in}",  (80, 220, 80)),
+        (f"OUT {count_out}", (80, 80, 220)),
+        (f"NET {net}",       (240, 240, 240)),
+    ]
+    box_w, box_h = 86, 22 * len(lines) + 8
+    cv2.rectangle(canvas_video, (6, 6), (6 + box_w, 6 + box_h), (0, 0, 0), -1)
+    for i, (text, colour) in enumerate(lines):
+        cv2.putText(canvas_video, text, (12, 26 + i * 22),
+                    FONT, 0.6, colour, 2, cv2.LINE_AA)
+
+
 def draw_tracks(canvas_video, tracks):
     """Overlay per-ID boxes on the upscaled VIDEO_W x VIDEO_H canvas.
 
@@ -290,13 +349,17 @@ def draw_tracks(canvas_video, tracks):
         draw_text(canvas_video, label, (x0 + 2, ly - 2), 0.45, (15, 15, 15), 1)
 
 
-def compose_dashboard(video_bgr, tracks, panel):
+def compose_dashboard(video_bgr, tracks, panel, meta):
     canvas = np.full((VIDEO_H, VIDEO_W + PANEL_W, 3), COL_BG, dtype=np.uint8)
     enhanced = enhance_video(video_bgr)
     canvas[:, :VIDEO_W] = cv2.resize(
         enhanced, (VIDEO_W, VIDEO_H), interpolation=cv2.INTER_LANCZOS4
     )
-    draw_tracks(canvas[:, :VIDEO_W], tracks)
+    video_view = canvas[:, :VIDEO_W]
+    draw_tripwire(video_view,
+                  meta["tw_vertical"], meta["tw_pos"], meta["tw_deadband"])
+    draw_tracks(video_view, tracks)
+    draw_counts_hud(video_view, meta["count_in"], meta["count_out"])
     canvas[:, VIDEO_W:] = panel
 
     return canvas
@@ -344,7 +407,7 @@ def main():
 
         video_bgr = rgb565_to_bgr(rgb565)
         panel = render_panel(meta, stream_fps, inference_fps)
-        canvas = compose_dashboard(video_bgr, tracks, panel)
+        canvas = compose_dashboard(video_bgr, tracks, panel, meta)
         cv2.imshow(WINDOW_TITLE, canvas)
 
         if cv2.waitKey(1) & 0xFF == 27:

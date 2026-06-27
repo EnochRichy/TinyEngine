@@ -100,15 +100,28 @@ extern APP_CAM_DATA app_camData;
 #define TRK_TRAILER_RECSIZE  12
 #define TRK_TRAILER_SIZE     (TRK_TRAILER_SLOTS * TRK_TRAILER_RECSIZE)  // 96
 
+/* Tripwire counter + config block appended after the 8-slot track trailer.
+ * The config bytes let the host dashboard auto-sync with firmware constants
+ * so there's a single source of truth (app_tracker.h):
+ *   [0..3]  u32 count_in           (little-endian)
+ *   [4..7]  u32 count_out          (little-endian)
+ *   [8]     u8  tripwire_vertical  (0 = horizontal, 1 = vertical)
+ *   [9]     u8  tripwire_pos       (camera-space, 0..159 or 0..119)
+ *   [10]    u8  tripwire_deadband  (camera-space pixels)
+ *   [11]    u8  reserved
+ * Total per-USB-frame = 16 hdr + 38400 RGB565 + 96 tracks + 12 cfg = 38524 B. */
+#define COUNTER_BLOCK_SIZE   12
+#define POST_PAYLOAD_SIZE    (TRK_TRAILER_SIZE + COUNTER_BLOCK_SIZE)    // 108
+
 static uint8_t  frameHeader[FRAME_HEADER_SIZE];
-static uint8_t  frameTrailer[TRK_TRAILER_SIZE];
+static uint8_t  frameTrailer[POST_PAYLOAD_SIZE];
 static uint32_t frameCounter = 0;
 static uint32_t txPacketIndex = 0;
 static bool     streamingInProgress = false;
 
 static void build_trailer(uint8_t *out)
 {
-    memset(out, 0, TRK_TRAILER_SIZE);
+    memset(out, 0, POST_PAYLOAD_SIZE);
     int active = 0;
     const track_t *tracks = APP_TRK_GetTracks(&active);
     int j = 0;
@@ -140,6 +153,22 @@ static void build_trailer(uint8_t *out)
         r[11] = 0;
         ++j;
     }
+
+    /* Tripwire counters + config: 12 bytes immediately after the 96-byte
+     * track trailer. Host reads the config bytes each frame, so flipping
+     * TRK_TRIPWIRE_VERTICAL in app_tracker.h and rebuilding firmware is
+     * enough -- no Python edit needed. */
+    uint32_t cin = 0, cout = 0;
+    APP_TRK_GetCounts(&cin, &cout);
+    uint8_t *c = &out[TRK_TRAILER_SIZE];
+    c[0] = (uint8_t)(cin  & 0xFF); c[1] = (uint8_t)((cin  >>  8) & 0xFF);
+    c[2] = (uint8_t)((cin  >> 16) & 0xFF); c[3] = (uint8_t)((cin  >> 24) & 0xFF);
+    c[4] = (uint8_t)(cout & 0xFF); c[5] = (uint8_t)((cout >>  8) & 0xFF);
+    c[6] = (uint8_t)((cout >> 16) & 0xFF); c[7] = (uint8_t)((cout >> 24) & 0xFF);
+    c[8]  = (uint8_t)(TRK_TRIPWIRE_VERTICAL & 0x01);
+    c[9]  = (uint8_t)(TRK_TRIPWIRE_POS      & 0xFF);
+    c[10] = (uint8_t)(TRK_TRIPWIRE_DEADBAND & 0xFF);
+    c[11] = 0;
 }
 
 
@@ -245,15 +274,16 @@ void APP_USBDeviceEventHandler(USB_DEVICE_EVENT event, void * eventData, uintptr
             }
             else if (txPacketIndex == FRAME_NUM_PACKETS)
             {
-                /* Short trailing packet: 96 B of tracker output, terminates the
-                 * USB frame with DATA_COMPLETE so the host parses one atomic
-                 * payload of 16 (header) + 38400 (RGB565) + 96 (trailer). */
+                /* Short trailing packet: 96 B of tracker output + 8 B of
+                 * tripwire counts (in, out), terminates the USB frame with
+                 * DATA_COMPLETE so the host parses one atomic payload of
+                 * 16 (header) + 38400 (RGB565) + 104 (trailer+counters). */
                 USB_DEVICE_EndpointWrite(
                     app_usbData.usbDevHandle,
                     &app_usbData.writeTranferHandle,
                     app_usbData.endpointTx,
                     frameTrailer,
-                    TRK_TRAILER_SIZE,
+                    POST_PAYLOAD_SIZE,
                     USB_DEVICE_TRANSFER_FLAGS_DATA_COMPLETE
                 );
 

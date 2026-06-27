@@ -7,6 +7,7 @@
 *******************************************************************************/
 
 #include "app_tracker.h"
+#include "app_cam.h"   /* LETTERBOX_ROW_PAD for model->camera y conversion */
 
 #include <stddef.h>
 #include <string.h>
@@ -14,6 +15,43 @@
 static track_t s_tracks[TRK_MAX_TRACKS];
 static int     s_next_id = 1;     /* 0 reserved for "empty slot" on the wire */
 static int     s_active_count = 0;
+
+/* Tripwire counters. Increment-only since boot; the host exposes a manual
+ * reset elsewhere if needed. uint32_t at 7 FPS, 1 cross/frame would wrap in
+ * ~19 years -- in practice unbounded. */
+static uint32_t s_count_in  = 0;
+static uint32_t s_count_out = 0;
+
+/* Box center along the tripwire's measurement axis, in camera-space
+ * (160x120). Model boxes are y-padded by LETTERBOX_ROW_PAD; we strip
+ * that for a horizontal line. */
+static inline int box_axis_camera(const det_box *b)
+{
+    int cx = (int)((b->x0 + b->x1) * 0.5f);
+    int cy = (int)((b->y0 + b->y1) * 0.5f) - (int)LETTERBOX_ROW_PAD;
+#if TRK_TRIPWIRE_VERTICAL
+    return cx;
+#else
+    return cy;
+#endif
+}
+
+/* Strict side (no deadband). Used to seed prev_side at spawn so the very
+ * first real crossing still counts. */
+static inline int8_t strict_side(int axis)
+{
+    return (axis < TRK_TRIPWIRE_POS) ? (int8_t)-1 : (int8_t)+1;
+}
+
+/* Deadband-hold side. Inside [POS-DB, POS+DB] we return prev so a person
+ * lingering on the line never flips state, which would otherwise let
+ * detector jitter accumulate phantom crossings. */
+static inline int8_t side_with_hold(int axis, int8_t prev)
+{
+    if (axis < TRK_TRIPWIRE_POS - TRK_TRIPWIRE_DEADBAND) return -1;
+    if (axis > TRK_TRIPWIRE_POS + TRK_TRIPWIRE_DEADBAND) return +1;
+    return prev;
+}
 
 static inline float iou(const det_box *a, const det_box *b)
 {
@@ -35,6 +73,8 @@ void APP_TRK_Reset(void)
     memset(s_tracks, 0, sizeof(s_tracks));
     s_next_id = 1;
     s_active_count = 0;
+    s_count_in  = 0;
+    s_count_out = 0;
 }
 
 void APP_TRK_Update(const det_box *det, int n)
@@ -62,6 +102,18 @@ void APP_TRK_Update(const det_box *det, int n)
         if (bt < 0) break;
         s_tracks[bt].box        = det[bd];     /* hard update, no smoothing */
         s_tracks[bt].miss_count = 0;
+
+        /* Tripwire check: the box just moved, so re-evaluate which side of
+         * the line this track is on. A sign flip vs prev_side = one crossing.
+         * Only ±1 -> ∓1 counts; transitions involving 0 (unseeded) don't,
+         * but spawn() always seeds prev_side strictly so 0 shouldn't occur
+         * here in normal flow. */
+        int     new_axis = box_axis_camera(&s_tracks[bt].box);
+        int8_t  new_side = side_with_hold(new_axis, s_tracks[bt].prev_side);
+        if (s_tracks[bt].prev_side == -1 && new_side == +1) ++s_count_in;
+        else if (s_tracks[bt].prev_side == +1 && new_side == -1) ++s_count_out;
+        s_tracks[bt].prev_side = new_side;
+
         trk_used[bt] = 1;
         det_used[bd] = 1;
     }
@@ -83,6 +135,10 @@ void APP_TRK_Update(const det_box *det, int n)
                 s_tracks[t].active     = 1;
                 s_tracks[t].miss_count = 0;
                 s_tracks[t].box        = det[d];
+                /* Seed strictly (ignore deadband) so a track that happens
+                 * to spawn on the line still has a definite side -- the
+                 * next genuine crossing will then count. */
+                s_tracks[t].prev_side  = strict_side(box_axis_camera(&det[d]));
                 break;
             }
         }
@@ -97,4 +153,10 @@ const track_t *APP_TRK_GetTracks(int *active_count_out)
 {
     if (active_count_out) *active_count_out = s_active_count;
     return s_tracks;
+}
+
+void APP_TRK_GetCounts(uint32_t *count_in, uint32_t *count_out)
+{
+    if (count_in)  *count_in  = s_count_in;
+    if (count_out) *count_out = s_count_out;
 }
