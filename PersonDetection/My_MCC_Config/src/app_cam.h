@@ -185,18 +185,18 @@ void APP_CAM_Initialize ( void );
 
 void APP_CAM_Tasks( void );
 
-// MCUNet person-det model input dimensions (HWC int8, 160x128x3 — native
-// detector input shape, no InputResizer rescale at codegen time).
-#define MODEL_IN_H  128
-#define MODEL_IN_W  160
+// MCUNet person-det model input dimensions (HWC int8, 128x96x3 after the
+// 160x128 -> 128x96 InputResizer rescale at codegen time).
+#define MODEL_IN_H  96
+#define MODEL_IN_W  128
 #define MODEL_IN_C  3
 #define MODEL_IN_BYTES (MODEL_IN_H * MODEL_IN_W * MODEL_IN_C)
 
-// Letterbox the 160x120 camera frame to 160x128 model input. 160 columns
-// pass through unchanged; 120 camera rows are centered with 4 zero-int8
-// rows of padding on top and 4 on bottom. Pixel scale is preserved, so
-// the model's anchor table (calibrated in 160x128 space) is unchanged.
-#define LETTERBOX_ROW_PAD ((MODEL_IN_H - IMG_HEIGHT) / 2)  // (128-120)/2 = 4
+// Center-crop from 160x120 camera frame to 128x96 model input. Crop preserves
+// pixel scale (objects keep their pixel size), which matters because the
+// model's anchor table is unchanged and still calibrated in 160x128 scale.
+#define CROP_ROW_OFFSET ((IMG_HEIGHT - MODEL_IN_H) / 2)   // (120-96)/2 = 12
+#define CROP_COL_OFFSET ((IMG_WIDTH  - MODEL_IN_W) / 2)   // (160-128)/2 = 16
 
 // Accessors
 const uint8_t *APP_Cam_GetRGB565Frame(void);

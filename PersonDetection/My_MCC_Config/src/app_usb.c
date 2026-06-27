@@ -91,7 +91,7 @@ extern APP_CAM_DATA app_camData;
  *   +1  u8   score_q8    (round(box.score * 255), 0..255)
  *   +2  i16  x0          camera-frame pixel space (0..159 x 0..119);
  *   +4  i16  y0            build_trailer() adds CROP_*_OFFSET to the model
- *   +6  i16  x1            96x96 coords so the host renders directly.
+ *   +6  i16  x1            128x96 coords so the host renders directly.
  *   +8  i16  y1
  *   +10 u8   miss_count
  *   +11 u8   reserved
@@ -136,14 +136,13 @@ static void build_trailer(uint8_t *out)
         if (sq > 255) sq = 255;
         r[1] = (uint8_t)sq;
 
-        /* Transform model-space (160x128 letterboxed) box to camera-space
-         * (160x120). 160 cols pass through unchanged; rows are offset by
-         * -LETTERBOX_ROW_PAD to undo the top/bottom zero padding. Host then
+        /* Transform model-space (128x96 center-cropped) box to camera-space
+         * (160x120) by adding the crop offsets on both axes. Host then
          * renders boxes directly on the camera frame with no further math. */
-        int16_t x0 = (int16_t)((int)tracks[t].box.x0);
-        int16_t y0 = (int16_t)((int)tracks[t].box.y0 - (int)LETTERBOX_ROW_PAD);
-        int16_t x1 = (int16_t)((int)tracks[t].box.x1);
-        int16_t y1 = (int16_t)((int)tracks[t].box.y1 - (int)LETTERBOX_ROW_PAD);
+        int16_t x0 = (int16_t)((int)tracks[t].box.x0 + (int)CROP_COL_OFFSET);
+        int16_t y0 = (int16_t)((int)tracks[t].box.y0 + (int)CROP_ROW_OFFSET);
+        int16_t x1 = (int16_t)((int)tracks[t].box.x1 + (int)CROP_COL_OFFSET);
+        int16_t y1 = (int16_t)((int)tracks[t].box.y1 + (int)CROP_ROW_OFFSET);
         r[2] = (uint8_t)(x0 & 0xFF); r[3] = (uint8_t)((x0 >> 8) & 0xFF);
         r[4] = (uint8_t)(y0 & 0xFF); r[5] = (uint8_t)((y0 >> 8) & 0xFF);
         r[6] = (uint8_t)(x1 & 0xFF); r[7] = (uint8_t)((x1 >> 8) & 0xFF);

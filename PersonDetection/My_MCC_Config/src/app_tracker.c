@@ -7,7 +7,7 @@
 *******************************************************************************/
 
 #include "app_tracker.h"
-#include "app_cam.h"   /* LETTERBOX_ROW_PAD for model->camera y conversion */
+#include "app_cam.h"   /* CROP_*_OFFSET for model->camera coord conversion */
 
 #include <stddef.h>
 #include <string.h>
@@ -23,12 +23,14 @@ static uint32_t s_count_in  = 0;
 static uint32_t s_count_out = 0;
 
 /* Box center along the tripwire's measurement axis, in camera-space
- * (160x120). Model boxes are y-padded by LETTERBOX_ROW_PAD; we strip
- * that for a horizontal line. */
+ * (160x120). The 128x96 model is a center-crop of the 160x120 camera frame,
+ * so model coords are offset by CROP_*_OFFSET from camera coords; we add
+ * those back to convert. (For comparison, the 160x128 letterbox config
+ * subtracts LETTERBOX_ROW_PAD instead.) */
 static inline int box_axis_camera(const det_box *b)
 {
-    int cx = (int)((b->x0 + b->x1) * 0.5f);
-    int cy = (int)((b->y0 + b->y1) * 0.5f) - (int)LETTERBOX_ROW_PAD;
+    int cx = (int)((b->x0 + b->x1) * 0.5f) + (int)CROP_COL_OFFSET;
+    int cy = (int)((b->y0 + b->y1) * 0.5f) + (int)CROP_ROW_OFFSET;
 #if TRK_TRIPWIRE_VERTICAL
     return cx;
 #else

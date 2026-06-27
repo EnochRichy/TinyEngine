@@ -30,7 +30,7 @@ Trailer layout (must mirror app_usb.c TRK_TRAILER_*), 8 records * 12 bytes:
   +10 u8   miss_count
   +11 u8   reserved
 
-The model input is a 96x96 center crop of the 160x120 camera frame. Firmware
+The model input is a 128x96 center crop of the 160x120 camera frame. Firmware
 transforms box coords to camera-frame space (adds CROP_*_OFFSET) before
 sending, so LETTERBOX_TOP=0 here -- no host-side offset is needed.
 """
@@ -71,13 +71,13 @@ COUNTER_BLOCK_SIZE = 12
 
 FRAME_PAYLOAD_SIZE = FRAME_RGB565_SIZE + TRK_TRAILER_SIZE + COUNTER_BLOCK_SIZE  # 38508
 
-# Firmware now sends box coords in camera-space (model 96x96 center-cropped
+# Firmware now sends box coords in camera-space (model 128x96 center-cropped
 # from camera 160x120, with the crop offset added on the firmware side).
 # No client-side letterbox correction needed; kept as 0 so existing render
 # math doesn't change.
 LETTERBOX_TOP      = 0
 MODEL_IN_H         = 96
-MODEL_IN_W         = 96
+MODEL_IN_W         = 128
 
 MARKER             = bytes([0xAA, 0x55, 0xAA, 0x55])
 
@@ -85,7 +85,7 @@ MARKER             = bytes([0xAA, 0x55, 0xAA, 0x55])
 MODEL_INFO = {
     "Model":   "MCUNet person-det",
     "Task":    "Person detection (YOLOv3-style)",
-    "Input":   "96x96x3 (HWC int8, cropped from 160x120)",
+    "Input":   "128x96x3 (HWC int8, cropped from 160x120)",
     "Output":  "3 heads (s8/s16/s32, 1 class)",
     "Boxes":   "anchors x 3, NMS 0.45",
     "Conf":    "valid threshold 0.5",

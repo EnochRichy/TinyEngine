@@ -392,22 +392,17 @@ static inline void rgb565_unpack(uint16_t pixel,
 
 void rgb565_to_modelinput_det(const uint8_t *src, signed char *dst)
 {
-    /* Letterbox 160x120 -> 160x128: zero-fill LETTERBOX_ROW_PAD rows on top,
-     * copy the 120 camera rows verbatim (160 cols pass through), zero-fill
-     * LETTERBOX_ROW_PAD rows on bottom. Per-pixel: RGB565 -> RGB888 ->
-     * (uint8 - 128) -> int8. The model's anchor table is calibrated in
-     * 160x128 space, so pixel scale must be preserved. */
-    const int row_stride = MODEL_IN_W * MODEL_IN_C;
-
-    memset(dst, 0, (size_t)(LETTERBOX_ROW_PAD * row_stride));
-
-    signed char *out = dst + (LETTERBOX_ROW_PAD * row_stride);
-    for (int y = 0; y < IMG_HEIGHT; ++y)
+    /* Center-crop 128x96 from the 160x120 camera frame -- no letterbox,
+     * no rescale. Camera coords (CROP_ROW_OFFSET+y, CROP_COL_OFFSET+x)
+     * map to model coords (y, x). */
+    signed char *out = dst;
+    for (int y = 0; y < MODEL_IN_H; ++y)
     {
-        const uint8_t *src_row = &src[y * IMG_WIDTH * 2];
+        const uint8_t *src_row = &src[(y + CROP_ROW_OFFSET) * IMG_WIDTH * 2];
         for (int x = 0; x < MODEL_IN_W; ++x)
         {
-            uint16_t p = src_row[x*2] | ((uint16_t)src_row[x*2 + 1] << 8);
+            int cx = x + CROP_COL_OFFSET;
+            uint16_t p = src_row[cx*2] | ((uint16_t)src_row[cx*2 + 1] << 8);
             uint8_t r, g, b;
             rgb565_unpack(p, &r, &g, &b);
             *out++ = (signed char)(r - 128);
@@ -415,8 +410,6 @@ void rgb565_to_modelinput_det(const uint8_t *src, signed char *dst)
             *out++ = (signed char)(b - 128);
         }
     }
-
-    memset(out, 0, (size_t)(LETTERBOX_ROW_PAD * row_stride));
 }
 
 /* ============================================================================
