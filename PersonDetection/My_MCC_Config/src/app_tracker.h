@@ -36,7 +36,7 @@ extern "C" {
  * an unmatched track's last box is treated as the same person. This rescues
  * a track when the detector blinks for one or two frames and the person
  * keeps moving -- IoU collapses below the gate but the centers are still
- * obviously the same target.
+ * obviously the same target. Set TRK_DIST_GATE_FRAC <= 0 to disable.
  *
  * TRK_MISS_INFLATE_PER also expands the track's search box for the IoU
  * pass by this fraction per missed frame (e.g. 0.10 -> +10% per miss on
@@ -53,7 +53,7 @@ extern "C" {
  * [POS-DEADBAND, POS+DEADBAND] holds its previous side, so a person
  * jittering on the line cannot rack up phantom counts. */
 #define TRK_TRIPWIRE_VERTICAL   1
-#define TRK_TRIPWIRE_POS        80
+#define TRK_TRIPWIRE_POS        90
 #define TRK_TRIPWIRE_DEADBAND   3
 
 typedef struct {
