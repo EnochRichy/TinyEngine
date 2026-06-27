@@ -407,10 +407,14 @@ void APP_USB_Tasks (void )
             }
 
             else if(app_usbData.epDataWritePending == false)
-            {  
+            {
 
 
-              if (app_camData.frame_ready) {
+              if (app_camData.usb_frame_ready) {
+                /* Consume the USB-side latch. Set by DMA_EventHandler on
+                 * every frame completion; independent from the ML pipeline's
+                 * frame_ready so APP_CAM_Tasks cannot starve us. */
+                app_camData.usb_frame_ready = false;
 
                 // Build header: marker + frame counter + ML decision + timing
                 frameHeader[0] = 0xAA;

@@ -93,9 +93,11 @@ void DMA_EventHandler(DMA_TRANSFER_EVENT event, uintptr_t context)
 {
     if (event == DMA_TRANSFER_EVENT_BLOCK_TRANSFER_COMPLETE) {
         app_camData.frame_ready = true;
+        app_camData.usb_frame_ready = true;
     } else if (event == DMA_TRANSFER_EVENT_ERROR) {
         /* Simple error handling: log and continue (original behavior) */
         app_camData.frame_ready = true;
+        app_camData.usb_frame_ready = true;
     }
 }
 
@@ -127,7 +129,13 @@ void VSYNC_ISR(void)
                                                     FRAME_BYTES);
 
       app_camData.line_index = 0;
-      app_camData.frame_ready = false;
+
+      /* Do NOT clear frame_ready here. The ISR fires immediately after
+       * DMA_EventHandler sets it (a few microseconds later when VSYNC
+       * pulses), which used to clobber the just-raised flag and force the
+       * main loop to wait a full extra frame period (~33 ms) before the
+       * next inference could start. The consumer (APP_CAM_Tasks) clears
+       * frame_ready when it has latched the frame. */
     }
 }
 
@@ -438,6 +446,7 @@ void APP_CAM_Initialize ( void )
     /* Place the App state machine in its initial state. */
     app_camData.state = APP_CAM_STATE_INIT;
     app_camData.frame_ready = false;
+    app_camData.usb_frame_ready = false;
     app_camData.line_index = 0;
     app_camData.processed_frame_data_ready = false;
 }

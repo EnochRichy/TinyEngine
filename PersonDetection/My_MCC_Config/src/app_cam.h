@@ -93,6 +93,12 @@ typedef struct
 
     bool frame_ready;
 
+    /* Independent USB consumer latch. Same DMA completion sets both
+     * frame_ready (consumed by APP_CAM_Tasks for the ML pipeline) and
+     * usb_frame_ready (consumed by APP_USB_Tasks). Decoupled so the ML
+     * path clearing frame_ready does not starve the USB stream. */
+    bool usb_frame_ready;
+
     uint32_t line_index;
 
     bool processed_frame_data_ready;
