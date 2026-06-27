@@ -13,7 +13,10 @@
       "Bash(cmake --build _build/ML_OV7670_GFX/default)",
       "Bash(cmake -B _build/ML_OV7670_GFX/default)",
       "Bash(python -c ' *)",
-      "Bash(python -c \"import torch; print\\('torch', torch.__version__\\)\")"
+      "Bash(python -c \"import torch; print\\('torch', torch.__version__\\)\")",
+      "Bash(mkdir -p d:/TinyEngine/PersonDetection)",
+      "Bash(cp CONTEXT.md Dashboard_via_USB.py DatasetCapture_via_USB.py LiveStream_via_USB.py libusb-1.0.dll gesture_int8.tflite d:/TinyEngine/PersonDetection/)",
+      "Bash(cp -r \"ML Model\" My_MCC_Config cmake d:/TinyEngine/PersonDetection/)"
     ]
   }
 }
