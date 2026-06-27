@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MCUNet — A Two-Axis Optimization Tour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/reveal.css">
+<style>
+:root{
+  --bg:#0a0f1c; --panel:#121a2c; --panel-2:#172238;
+  --line:#1f2c47; --line-2:#2a3a5c;
+  --fg:#e6ecf5; --fg-dim:#9aa8c2; --fg-mute:#6b7894;
+  --acc:#22d3ee; --acc-2:#7ee8fa; --purple:#c084fc;
+  --amber:#fbbf24; --green:#34d399; --red:#f87171;
+  --sram:#22d3ee; --lat:#c084fc;
+  --mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,Segoe UI,system-ui,sans-serif;
+}
+html,body{background:var(--bg) !important; color:var(--fg)}
+.reveal-viewport{background:var(--bg) !important}
+.reveal{font-family:var(--sans); color:var(--fg); font-size:24px; background:var(--bg)}
+.reveal .slides{text-align:left; color:var(--fg)}
+.reveal .backgrounds{background:var(--bg)}
+.reveal .slides section{
+  background-image:
+    radial-gradient(ellipse 900px 500px at 50% -10%, rgba(34,211,238,0.10), transparent 60%),
+    radial-gradient(ellipse 700px 360px at 90% 110%, rgba(192,132,252,0.07), transparent 60%);
+  padding:36px 56px; height:100%; box-sizing:border-box;
+}
+.reveal section.sram{
+  background-image:
+    radial-gradient(ellipse 900px 500px at 50% -10%, rgba(34,211,238,0.16), transparent 60%),
+    radial-gradient(ellipse 600px 300px at 100% 100%, rgba(34,211,238,0.06), transparent 60%);
+}
+.reveal section.lat{
+  background-image:
+    radial-gradient(ellipse 900px 500px at 50% -10%, rgba(192,132,252,0.16), transparent 60%),
+    radial-gradient(ellipse 600px 300px at 100% 100%, rgba(192,132,252,0.06), transparent 60%);
+}
+.reveal h1,.reveal h2,.reveal h3{color:var(--fg); font-weight:700; letter-spacing:-0.4px; text-transform:none; margin-top:0}
+.reveal h1{font-size:54px; line-height:1.1}
+.reveal h2{font-size:32px; margin:0 0 6px}
+.reveal h2::after{content:""; display:block; width:64px; height:3px; margin-top:12px; background:linear-gradient(90deg,var(--acc),transparent); border-radius:2px}
+.reveal section.lat h2::after{background:linear-gradient(90deg,var(--purple),transparent)}
+.reveal .num{font-family:var(--mono); font-size:12px; color:var(--acc); padding:3px 10px; border:1px solid var(--line-2); border-radius:6px; background:rgba(34,211,238,0.06); display:inline-block; margin-bottom:12px}
+.reveal section.lat .num{color:var(--purple); background:rgba(192,132,252,0.06)}
+.reveal .sub{color:var(--fg-dim); font-size:17px; margin:6px 0 18px; max-width:1000px}
+.reveal ul{list-style:none; padding:0; margin:14px 0}
+.reveal li{position:relative; padding:7px 0 7px 26px; line-height:1.5; font-size:20px}
+.reveal li::before{content:""; position:absolute; left:0; top:17px; width:9px; height:9px; border-radius:50%; background:var(--acc); box-shadow:0 0 8px rgba(34,211,238,0.55)}
+.reveal section.lat li::before{background:var(--purple); box-shadow:0 0 8px rgba(192,132,252,0.55)}
+.reveal li strong{color:var(--acc-2)}
+.reveal section.lat li strong{color:#dab8ff}
+.reveal code{font-family:var(--mono); color:var(--acc-2); background:rgba(34,211,238,0.08); padding:2px 6px; border-radius:4px; font-size:0.85em}
+.reveal pre{margin:10px 0; background:var(--panel); border:1px solid var(--line); border-radius:10px}
+.reveal pre code{display:block; padding:14px 18px; background:transparent; color:var(--fg); font-size:15px; line-height:1.5}
+.reveal pre code .kw{color:var(--purple)} .reveal pre code .str{color:var(--green)} .reveal pre code .com{color:var(--fg-mute)} .reveal pre code .num1{color:var(--amber)}
+.reveal table{border-collapse:collapse; margin:10px 0; width:100%; font-size:17px}
+.reveal th,.reveal td{padding:8px 12px; text-align:left; border-bottom:1px solid var(--line)}
+.reveal th{color:var(--acc); font-weight:600; font-size:13px; text-transform:uppercase; letter-spacing:0.6px; border-bottom:1px solid var(--line-2)}
+.reveal section.lat th{color:var(--purple)}
+.reveal td.win{color:var(--green); font-weight:600}
+.reveal td.bad{color:var(--red)}
+.reveal .grid{display:grid; gap:20px}
+.reveal .grid.c2{grid-template-columns:1fr 1fr}
+.reveal .grid.c3{grid-template-columns:1fr 1fr 1fr}
+.reveal .grid.split{grid-template-columns:1.05fr 0.95fr}
+.reveal .panel{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 18px}
+.reveal .panel h3{font-size:16px; margin:0 0 8px; color:var(--acc)}
+.reveal section.lat .panel h3{color:var(--purple)}
+.reveal .stat{font-family:var(--mono); font-size:30px; font-weight:600; color:var(--acc-2)}
+.reveal .stat .unit{font-size:15px; color:var(--fg-dim); margin-left:4px}
+.reveal .badge{display:inline-block; font-family:var(--mono); font-size:11px; padding:3px 8px; border-radius:4px; background:rgba(34,211,238,0.12); color:var(--acc-2); border:1px solid rgba(34,211,238,0.3); margin-right:6px}
+.reveal .badge.lat{background:rgba(192,132,252,0.14); color:#dab8ff; border-color:rgba(192,132,252,0.4)}
+.reveal .badge.warn{background:rgba(251,191,36,0.12); color:var(--amber); border-color:rgba(251,191,36,0.3)}
+.reveal .badge.bad{background:rgba(248,113,113,0.12); color:var(--red); border-color:rgba(248,113,113,0.3)}
+.reveal .center{display:flex; align-items:center; justify-content:center; flex-direction:column; height:100%; text-align:center}
+.reveal .center h1{text-align:center}
+.reveal aside.notes{display:none}
+svg.diagram{width:100%; height:auto; max-height:420px}
+svg .node{fill:var(--panel-2); stroke:var(--line-2); stroke-width:1.5}
+svg .node.acc{fill:rgba(34,211,238,0.12); stroke:var(--acc)}
+svg .node.purple{fill:rgba(192,132,252,0.10); stroke:var(--purple)}
+svg .node.green{fill:rgba(52,211,153,0.10); stroke:var(--green)}
+svg .node.red{fill:rgba(248,113,113,0.10); stroke:var(--red)}
+svg .label{fill:var(--fg); font-family:var(--sans); font-size:13px; font-weight:500}
+svg .label.dim{fill:var(--fg-dim)}
+svg .label.acc{fill:var(--acc-2)}
+svg .label.purple{fill:#dab8ff}
+svg .label.mono{font-family:var(--mono); font-size:11px}
+svg .arrow{stroke:var(--fg-dim); stroke-width:1.5; fill:none; marker-end:url(#arrow)}
+svg .arrow.acc{stroke:var(--acc); marker-end:url(#arrow-acc)}
+svg .arrow.purple{stroke:var(--purple); marker-end:url(#arrow-purple)}
+svg .gridline{stroke:var(--line); stroke-width:1; stroke-dasharray:2 4}
+.metric-row{display:grid; grid-template-columns:160px 1fr 100px; gap:12px; align-items:center; margin:8px 0; font-size:15px}
+.metric-row .name{color:var(--fg-dim)}
+.metric-row .bar{height:14px; background:var(--line); border-radius:4px; overflow:hidden; position:relative}
+.metric-row .bar > div{height:100%; border-radius:4px}
+.metric-row .val{font-family:var(--mono); color:var(--acc-2); text-align:right}
+.section-cover{display:flex; flex-direction:column; align-items:flex-start; justify-content:center; height:100%}
+.section-cover .axis-tag{font-family:var(--mono); font-size:14px; padding:6px 14px; border-radius:8px; margin-bottom:18px}
+.axis-tag.sram{background:rgba(34,211,238,0.18); color:var(--acc-2); border:1px solid rgba(34,211,238,0.5)}
+.axis-tag.lat{background:rgba(192,132,252,0.18); color:#dab8ff; border:1px solid rgba(192,132,252,0.5)}
+.tech-card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 16px; margin-bottom:8px}
+.tech-card h4{margin:0 0 4px; font-size:15px; color:var(--acc-2)}
+.section.lat .tech-card h4{color:#dab8ff}
+.tech-card p{margin:0; color:var(--fg-dim); font-size:14px}
+.qa-big{font-size:96px; font-weight:700; text-align:center; background:linear-gradient(135deg,var(--acc),var(--purple)); -webkit-background-clip:text; background-clip:text; color:transparent}
+.kv{display:grid; grid-template-columns:auto 1fr; gap:6px 16px; font-size:16px}
+.kv .k{color:var(--fg-mute); font-family:var(--mono); font-size:13px}
+.kv .v{color:var(--fg)}
+.tworow{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+.axis-pill{display:inline-block; padding:3px 10px; border-radius:14px; font-family:var(--mono); font-size:11px; margin-right:6px}
+.axis-pill.sram{background:rgba(34,211,238,0.18); color:var(--acc-2)}
+.axis-pill.lat{background:rgba(192,132,252,0.18); color:#dab8ff}
+.axis-pill.both{background:linear-gradient(90deg,rgba(34,211,238,0.18),rgba(192,132,252,0.18)); color:#fff}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#9aa8c2"/>
+  </marker>
+  <marker id="arrow-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#22d3ee"/>
+  </marker>
+  <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#c084fc"/>
+  </marker>
+</defs>
+</svg>
+
+<div class="reveal"><div class="slides">
+
+<!-- ===== SLIDE 1 — Title ===== -->
+<section><div class="center">
+  <div class="num">A 60-minute talk · 30 slides</div>
+  <h1>MCUNet, on two axes</h1>
+  <p class="sub" style="margin-top:14px;font-size:20px">Every optimization in TinyNAS + TinyEngine attacks one of two scarcities.<br>This deck splits the project along that line and scores each technique.</p>
+  <div style="margin-top:30px;display:flex;gap:16px;justify-content:center">
+    <span class="axis-pill sram">SRAM ↓</span>
+    <span class="axis-pill lat">cycles ↓</span>
+  </div>
+</div></section>
+
+<!-- ===== SLIDE 2 — The two scarcity axes ===== -->
+<section>
+  <div class="num">02 / 30 — Framing</div>
+  <h2>The two scarcity axes</h2>
+  <p class="sub">Every MCU deployment failure is a failure on one of these. MCUNet's optimization catalog maps cleanly onto them.</p>
+  <div class="grid c2" style="margin-top:18px">
+    <div class="panel" style="border:1px solid rgba(34,211,238,0.4)">
+      <h3 style="color:var(--acc);font-size:18px">SRAM — the activation workspace</h3>
+      <ul style="margin:6px 0">
+        <li>Hard ceiling, set by silicon</li>
+        <li>128 KB – 1 MB on Cortex-M parts</li>
+        <li>Hit it → the program <strong>doesn't allocate</strong></li>
+        <li>You can't trade average for peak</li>
+      </ul>
+    </div>
+    <div class="panel" style="border:1px solid rgba(192,132,252,0.4)">
+      <h3 style="color:var(--purple);font-size:18px">Cycles — the inference latency</h3>
+      <ul style="margin:6px 0">
+        <li style="--bullet:purple">Soft ceiling, set by clock + bus</li>
+        <li style="--bullet:purple">100 – 600 MHz on M4F / M7</li>
+        <li style="--bullet:purple">Hit it → the program <strong>misses its frame</strong></li>
+        <li style="--bullet:purple">Every wasted cycle is dispatch, not math</li>
+      </ul>
+    </div>
+  </div>
+  <p class="sub" style="margin-top:14px;text-align:center">The whole talk: <strong>Part A</strong> attacks the left column. <strong>Part B</strong> attacks the right.</p>
+</section>
+
+<!-- ===== SLIDE 3 — TFLM hits the SRAM ceiling ===== -->
+<section>
+  <div class="num">03 / 30 — Why TFLM hits both ceilings</div>
+  <h2>TFLM and the SRAM ceiling</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Greedy arena</strong> — allocator can't see future tensor lifetimes</li>
+      <li><strong>No in-place ops</strong> — every layer needs its own output buffer</li>
+      <li><strong>No patching</strong> — full feature maps materialized in SRAM</li>
+      <li><strong>Interpreter state</strong> sits in SRAM, alongside model metadata</li>
+    </ul>
+    <svg class="diagram" viewBox="0 0 460 240">
+      <text class="label dim mono" x="20" y="20">SRAM occupancy over time</text>
+      <line class="gridline" x1="20" y1="200" x2="440" y2="200"/>
+      <text class="label dim mono" x="20" y="218">L1</text>
+      <text class="label dim mono" x="120" y="218">L2</text>
+      <text class="label dim mono" x="220" y="218">L3</text>
+      <text class="label dim mono" x="320" y="218">L4</text>
+      <rect fill="rgba(248,113,113,0.6)" stroke="#f87171" stroke-width="1" x="20" y="100" width="100" height="100"/>
+      <rect fill="rgba(248,113,113,0.6)" stroke="#f87171" stroke-width="1" x="120" y="60" width="100" height="140"/>
+      <rect fill="rgba(248,113,113,0.6)" stroke="#f87171" stroke-width="1" x="220" y="80" width="100" height="120"/>
+      <rect fill="rgba(248,113,113,0.6)" stroke="#f87171" stroke-width="1" x="320" y="120" width="100" height="80"/>
+      <line stroke="#f87171" stroke-width="2" stroke-dasharray="4 4" x1="20" y1="60" x2="440" y2="60"/>
+      <text class="label" x="430" y="54" text-anchor="end" style="fill:#f87171;font-weight:600">peak: 140 KB</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ===== SLIDE 4 — TFLM hits the latency ceiling ===== -->
+<section>
+  <div class="num">04 / 30 — Why TFLM hits both ceilings</div>
+  <h2>TFLM and the latency ceiling</h2>
+  <div class="grid split">
+    <svg class="diagram" viewBox="0 0 460 260">
+      <text class="label dim mono" x="20" y="20">Time spent per layer (TFLM)</text>
+      <rect fill="rgba(248,113,113,0.5)" x="40" y="60" width="80" height="40" rx="4"/>
+      <text class="label" x="80" y="84" text-anchor="middle">dispatch</text>
+      <rect fill="rgba(192,132,252,0.45)" x="120" y="60" width="60" height="40" rx="4"/>
+      <text class="label" x="150" y="84" text-anchor="middle">setup</text>
+      <rect fill="rgba(34,211,238,0.55)" x="180" y="60" width="240" height="40" rx="4"/>
+      <text class="label" x="300" y="84" text-anchor="middle">actual math</text>
+      <text class="label dim mono" x="240" y="130" text-anchor="middle">≈ 25–40% wasted on machinery</text>
+      <text class="label acc" x="20" y="170" style="font-weight:600">Generic kernel inner loop:</text>
+      <rect fill="rgba(248,113,113,0.18)" stroke="#f87171" stroke-width="1" x="20" y="180" width="420" height="60" rx="6"/>
+      <text class="label mono" x="30" y="200" style="font-size:12px">for (i=0; i&lt;out_h; i++)        // bound unknown</text>
+      <text class="label mono" x="30" y="216" style="font-size:12px">  for (j=0; j&lt;out_w; j++)      // → no unroll</text>
+      <text class="label mono" x="30" y="232" style="font-size:12px">    if (stride==1) {...} else  // → branch in inner loop</text>
+    </svg>
+    <ul>
+      <li><strong>Per-op dispatch</strong> — resolver lookup every layer, every frame</li>
+      <li><strong>Generic kernels</strong> — branches on stride, padding, channels</li>
+      <li><strong>Unknown loop bounds</strong> — compiler can't unroll or vectorize</li>
+      <li><strong>Per-call requantization setup</strong> — multiplier table reads</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ===== SLIDE 5 — Part A header ===== -->
+<section class="sram">
+  <div class="section-cover">
+    <span class="axis-tag sram">PART A · 7 techniques</span>
+    <h1 style="font-size:62px;margin:8px 0 14px"><span style="color:var(--acc)">How MCUNet</span><br>cuts SRAM</h1>
+    <p class="sub" style="font-size:18px;max-width:880px">Activations break the budget long before weights do. Every technique in this section reduces the <em>peak</em> activation footprint — the only number that matters when SRAM allocation fails.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:24px">
+      <span class="badge">A1 global memory schedule</span>
+      <span class="badge">A2 in-place DWConv</span>
+      <span class="badge">A3 patch inference</span>
+      <span class="badge">A4 op reorder</span>
+      <span class="badge">A5 static placement</span>
+      <span class="badge">A6 no interpreter</span>
+      <span class="badge">A7 TinyNAS-aware shapes</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 6 — A1 Global memory scheduling ===== -->
+<section class="sram">
+  <div class="num">06 / 30 — A1 · TinyEngine</div>
+  <h2>A1. Global memory scheduling</h2>
+  <p class="sub">Compile-time bin-packing of buffer storage based on full-graph tensor lifetimes.</p>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — analyze graph → compute birth/death of each tensor → solve 2D packing offline</li>
+      <li><strong>Why it works</strong> — non-overlapping lifetimes can share physical bytes (like register allocation)</li>
+      <li><strong>Cost</strong> — codegen time only, zero runtime</li>
+      <li><strong>Magnitude</strong> — <span style="color:var(--green);font-weight:600">50–70% peak SRAM ↓</span> vs. greedy</li>
+      <li>Single largest source of TinyEngine's SRAM lead over TFLM</li>
+    </ul>
+    <svg class="diagram" viewBox="0 0 460 240">
+      <text class="label dim mono" x="20" y="20">time →</text>
+      <line class="gridline" x1="60" y1="30" x2="60" y2="220"/>
+      <line class="gridline" x1="180" y1="30" x2="180" y2="220"/>
+      <line class="gridline" x1="300" y1="30" x2="300" y2="220"/>
+      <line class="gridline" x1="420" y1="30" x2="420" y2="220"/>
+      <text class="label dim mono" x="60" y="42" text-anchor="middle">L1</text>
+      <text class="label dim mono" x="180" y="42" text-anchor="middle">L2</text>
+      <text class="label dim mono" x="300" y="42" text-anchor="middle">L3</text>
+      <text class="label dim mono" x="420" y="42" text-anchor="middle">L4</text>
+      <rect fill="rgba(34,211,238,0.7)" stroke="#22d3ee" stroke-width="1" x="60" y="60" width="180" height="32" rx="4"/>
+      <text class="label" x="150" y="80" text-anchor="middle">T1 — 32 KB</text>
+      <rect fill="rgba(251,191,36,0.7)" stroke="#fbbf24" stroke-width="1" x="180" y="100" width="120" height="32" rx="4"/>
+      <text class="label" x="240" y="120" text-anchor="middle">T2 — 16 KB</text>
+      <rect fill="rgba(52,211,153,0.7)" stroke="#34d399" stroke-width="1" x="300" y="60" width="120" height="32" rx="4"/>
+      <text class="label" x="360" y="80" text-anchor="middle">T3 reuses T1</text>
+      <line class="gridline" x1="20" y1="160" x2="440" y2="160"/>
+      <text class="label dim mono" x="20" y="180">peak SRAM:</text>
+      <text class="label" x="20" y="200" style="fill:#f87171">greedy: 48 KB</text>
+      <text class="label acc" x="20" y="218" style="font-weight:600">global: 32 KB ← T3 lands on T1's bytes</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ===== SLIDE 7 — A2 In-place DWConv ===== -->
+<section class="sram">
+  <div class="num">07 / 30 — A2 · TinyEngine</div>
+  <h2>A2. In-place depthwise convolution</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — DW K×K reads small neighborhood, output written back into input buffer in raster order</li>
+      <li><strong>Why it works</strong> — DW filters don't mix channels; spatial neighborhood is bounded → no read-write hazard</li>
+      <li><strong>Magnitude</strong> — eliminates one full activation tensor per DW layer</li>
+      <li><strong>Compounds with A1</strong> — buffers freed earlier give the scheduler more reuse opportunities</li>
+      <li>This project has <strong>18 in-place DW kernel variants</strong> on disk</li>
+    </ul>
+    <svg class="diagram" viewBox="0 0 460 280">
+      <text class="label dim mono" x="80" y="22">Standard DW</text>
+      <rect class="node red" x="20" y="40" width="160" height="80" rx="8"/>
+      <text class="label" x="100" y="68" text-anchor="middle">input buffer</text>
+      <text class="label dim mono" x="100" y="88" text-anchor="middle">stays alive</text>
+      <line class="arrow" x1="100" y1="120" x2="100" y2="160"/>
+      <rect class="node red" x="20" y="164" width="160" height="80" rx="8"/>
+      <text class="label" x="100" y="192" text-anchor="middle">output buffer</text>
+      <text class="label dim mono" x="100" y="212" text-anchor="middle">+ same size again</text>
+      <text class="label acc" x="360" y="22" style="font-weight:600">In-place DW</text>
+      <rect class="node acc" x="280" y="40" width="160" height="120" rx="8"/>
+      <text class="label acc" x="360" y="78" text-anchor="middle" style="font-weight:600">single buffer</text>
+      <text class="label dim mono" x="360" y="100" text-anchor="middle">read → compute → write back</text>
+      <text class="label dim mono" x="360" y="118" text-anchor="middle">in raster order</text>
+      <text class="label dim mono" x="360" y="136" text-anchor="middle">same bytes</text>
+      <text class="label" x="360" y="200" text-anchor="middle" style="fill:#34d399;font-size:18px;font-weight:600">−50% activation</text>
+      <text class="label" x="360" y="222" text-anchor="middle" style="fill:#34d399;font-size:18px;font-weight:600">memory per DW</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ===== SLIDE 8 — A3 Patch-based inference ===== -->
+<section class="sram">
+  <div class="num">08 / 30 — A3 · TinyEngine (MCUNetV2)</div>
+  <h2>A3. Patch-based inference</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — depth-first per spatial patch instead of breadth-first per layer</li>
+      <li><strong>Why it works</strong> — early CNN layers are spatially local; a patch + receptive-field margin computes independently</li>
+      <li><strong>Magnitude</strong> — peak SRAM drops from <em>full feature map</em> to <em>patch working set</em></li>
+      <li><strong>Cost</strong> — small recompute at patch boundaries; V2 redistributes receptive fields to minimize overlap</li>
+      <li><strong>Unlocks</strong> 320×320 input on parts that previously capped at ~144×144</li>
+    </ul>
+    <svg class="diagram" viewBox="0 0 460 300">
+      <text class="label dim mono" x="20" y="20">320×320 input</text>
+      <rect class="node" x="20" y="30" width="200" height="200" rx="6"/>
+      <g stroke="rgba(34,211,238,0.4)" stroke-width="1" fill="none">
+        <line x1="70" y1="30" x2="70" y2="230"/><line x1="120" y1="30" x2="120" y2="230"/>
+        <line x1="170" y1="30" x2="170" y2="230"/><line x1="20" y1="80" x2="220" y2="80"/>
+        <line x1="20" y1="130" x2="220" y2="130"/><line x1="20" y1="180" x2="220" y2="180"/>
+      </g>
+      <rect x="70" y="80" width="50" height="50" fill="rgba(34,211,238,0.45)" stroke="#22d3ee" stroke-width="2"/>
+      <text class="label acc mono" x="95" y="110" text-anchor="middle" style="font-weight:600">patch</text>
+      <line class="arrow acc" x1="225" y1="110" x2="265" y2="110"/>
+      <rect class="node acc" x="270" y="60" width="170" height="50" rx="6"/>
+      <text class="label acc" x="355" y="82" text-anchor="middle">Layers 1–8</text>
+      <text class="label dim mono" x="355" y="98" text-anchor="middle">on this patch only</text>
+      <line class="arrow acc" x1="355" y1="110" x2="355" y2="140"/>
+      <rect class="node green" x="270" y="144" width="170" height="50" rx="6"/>
+      <text class="label" x="355" y="166" text-anchor="middle" style="fill:#34d399;font-weight:600">Output region</text>
+      <text class="label dim mono" x="355" y="182" text-anchor="middle">discard intermediates</text>
+      <text class="label acc mono" x="120" y="265" text-anchor="middle">peak SRAM ∝ patch, not full map</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ===== SLIDE 9 — A4 Operator reordering ===== -->
+<section class="sram">
+  <div class="num">09 / 30 — A4 · TinyEngine</div>
+  <h2>A4. Operator reordering</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — when the graph has parallel branches, schedule them sequentially when no data dependency forces interleaving</li>
+      <li><strong>Why it works</strong> — two branches "live at the same time" can be made non-overlapping in time</li>
+      <li><strong>Cost</strong> — codegen time only</li>
+      <li><strong>Magnitude</strong> — modest alone, <strong>compounds heavily</strong> with A1</li>
+      <li>Especially relevant for residual-block-heavy networks</li>
+    </ul>
+    <svg class="diagram" viewBox="0 0 460 260">
+      <text class="label dim mono" x="60" y="20">Naive (interleaved)</text>
+      <rect class="node red" x="20" y="30" width="100" height="36" rx="4"/>
+      <text class="label" x="70" y="52" text-anchor="middle">B1.a</text>
+      <rect class="node red" x="20" y="68" width="100" height="36" rx="4"/>
+      <text class="label" x="70" y="90" text-anchor="middle">B2.a</text>
+      <rect class="node red" x="20" y="106" width="100" height="36" rx="4"/>
+      <text class="label" x="70" y="128" text-anchor="middle">B1.b</text>
+      <rect class="node red" x="20" y="144" width="100" height="36" rx="4"/>
+      <text class="label" x="70" y="166" text-anchor="middle">B2.b</text>
+      <text class="label" x="70" y="200" text-anchor="middle" style="fill:#f87171;font-weight:600">B1+B2 alive</text>
+      <text class="label dim mono" x="70" y="218" text-anchor="middle">peak = both</text>
+      <text class="label acc" x="340" y="20" style="font-weight:600">Reordered (sequential)</text>
+      <rect class="node acc" x="290" y="30" width="100" height="36" rx="4"/>
+      <text class="label acc" x="340" y="52" text-anchor="middle">B1.a</text>
+      <rect class="node acc" x="290" y="68" width="100" height="36" rx="4"/>
+      <text class="label acc" x="340" y="90" text-anchor="middle">B1.b → done</text>
+      <rect class="node acc" x="290" y="106" width="100" height="36" rx="4"/>
+      <text class="label acc" x="340" y="128" text-anchor="middle">B2.a</text>
+      <rect class="node acc" x="290" y="144" width="100" height="36" rx="4"/>
+      <text class="label acc" x="340" y="166" text-anchor="middle">B2.b</text>
+      <text class="label" x="340" y="200" text-anchor="middle" style="fill:#34d399;font-weight:600">one branch at a time</text>
+      <text class="label dim mono" x="340" y="218" text-anchor="middle">peak = single branch</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ===== SLIDE 10 — A5 Static buffer placement ===== -->
+<section class="sram">
+  <div class="num">10 / 30 — A5 · TinyEngine</div>
+  <h2>A5. Static buffer placement</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — every buffer has a fixed address chosen at codegen time, emitted as <code>buffer0[OFFSET]</code></li>
+      <li><strong>Why it works</strong> — no runtime allocator → no metadata, no fragmentation, no padding for free-list overhead</li>
+      <li><strong>Cost</strong> — rigidity; model swap = re-codegen + re-flash</li>
+      <li><strong>Magnitude</strong> — modest standalone, but <strong>prerequisite</strong> for A1 and A4 to function</li>
+    </ul>
+    <div class="panel">
+      <pre style="margin-top:0"><code><span class="com">// genModel.c — what TinyEngine emits</span>
+<span class="kw">static</span> <span class="kw">int8_t</span> buffer0[PEAK_MEM] __attribute__((section(<span class="str">".dtcm"</span>)));
+
+<span class="kw">int8_t</span>* getInput()  { <span class="kw">return</span> &amp;buffer0[<span class="num1">16384</span>]; }
+<span class="kw">int8_t</span>* getOutput() { <span class="kw">return</span> &amp;buffer0[<span class="num1">160</span>]; }
+
+<span class="com">/* every layer's input/output offsets baked in */</span>
+layer1_conv2d(buffer0 + <span class="num1">0</span>,    buffer0 + <span class="num1">16384</span>);
+layer2_dw3x3 (buffer0 + <span class="num1">16384</span>);              <span class="com">// in-place</span>
+layer3_pw1x1 (buffer0 + <span class="num1">16384</span>, buffer0 + <span class="num1">0</span>);  <span class="com">// reuse [0]</span></code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 11 — A6 No interpreter SRAM benefit ===== -->
+<section class="sram">
+  <div class="num">11 / 30 — A6 · TinyEngine</div>
+  <h2>A6. No interpreter, no runtime structures</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — model is compiled-in C, not a data blob parsed at runtime</li>
+      <li><strong>What goes away</strong> — FlatBuffer copy, OpResolver tables, MicroInterpreter state, per-tensor <code>TfLiteTensor</code> structs</li>
+      <li><strong>SRAM angle</strong> — those structures live <em>in SRAM</em> on TFLM</li>
+      <li><strong>Magnitude</strong> — single-digit KB on small models, low tens of KB on large ones</li>
+      <li>More of a latency win than SRAM win — see <span class="badge lat">B1</span></li>
+    </ul>
+    <svg class="diagram" viewBox="0 0 460 260">
+      <rect class="node red" x="20" y="30" width="200" height="200" rx="10"/>
+      <text class="label" x="120" y="52" text-anchor="middle" style="fill:#f87171;font-weight:600">TFLM SRAM</text>
+      <rect fill="rgba(248,113,113,0.3)" stroke="#f87171" stroke-width="1" x="40" y="64" width="160" height="32" rx="4"/>
+      <text class="label" x="120" y="84" text-anchor="middle">FlatBuffer copy</text>
+      <rect fill="rgba(248,113,113,0.3)" stroke="#f87171" stroke-width="1" x="40" y="100" width="160" height="32" rx="4"/>
+      <text class="label" x="120" y="120" text-anchor="middle">OpResolver tables</text>
+      <rect fill="rgba(248,113,113,0.3)" stroke="#f87171" stroke-width="1" x="40" y="136" width="160" height="32" rx="4"/>
+      <text class="label" x="120" y="156" text-anchor="middle">interpreter state</text>
+      <rect fill="rgba(34,211,238,0.4)" stroke="#22d3ee" stroke-width="1" x="40" y="172" width="160" height="50" rx="4"/>
+      <text class="label" x="120" y="194" text-anchor="middle">activations</text>
+      <text class="label dim mono" x="120" y="210" text-anchor="middle">(what's left)</text>
+      <rect class="node acc" x="240" y="30" width="200" height="200" rx="10"/>
+      <text class="label acc" x="340" y="52" text-anchor="middle" style="font-weight:600">TinyEngine SRAM</text>
+      <rect fill="rgba(34,211,238,0.5)" stroke="#22d3ee" stroke-width="2" x="260" y="64" width="160" height="158" rx="4"/>
+      <text class="label acc" x="340" y="138" text-anchor="middle" style="font-size:18px;font-weight:600">activations</text>
+      <text class="label dim mono" x="340" y="158" text-anchor="middle">whole arena</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ===== SLIDE 12 — A7 TinyNAS picks fitting shapes ===== -->
+<section class="sram">
+  <div class="num">12 / 30 — A7 · TinyNAS</div>
+  <h2>A7. TinyNAS picks shapes that fit</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — NAS objective is accuracy <em>subject to</em> a hard SRAM constraint, queried by asking TinyEngine to schedule each candidate</li>
+      <li><strong>Why it works</strong> — peak SRAM is <em>not</em> a smooth function of FLOPs or parameter count; only the engine knows</li>
+      <li><strong>Cost</strong> — search-time cost only, offline</li>
+      <li><strong>Magnitude</strong> — makes everything else tractable</li>
+      <li>Without A7 you'd need to hand-shape a network to fit the budget</li>
+    </ul>
+    <svg class="diagram" viewBox="0 0 460 280">
+      <rect class="node acc" x="20" y="30" width="180" height="60" rx="10"/>
+      <text class="label acc" x="110" y="56" text-anchor="middle" style="font-weight:600">TinyNAS</text>
+      <text class="label dim mono" x="110" y="76" text-anchor="middle">candidate network N</text>
+      <line class="arrow acc" x1="200" y1="60" x2="240" y2="60"/>
+      <rect class="node purple" x="240" y="30" width="200" height="60" rx="10"/>
+      <text class="label purple" x="340" y="56" text-anchor="middle" style="font-weight:600">TinyEngine</text>
+      <text class="label dim mono" x="340" y="76" text-anchor="middle">schedule + estimate peak</text>
+      <line class="arrow purple" x1="340" y1="90" x2="340" y2="140"/>
+      <rect class="node" x="240" y="144" width="200" height="60" rx="10"/>
+      <text class="label" x="340" y="170" text-anchor="middle">"this candidate uses</text>
+      <text class="label" x="340" y="186" text-anchor="middle"><tspan style="font-family:var(--mono);fill:#fbbf24">87 KB</tspan> peak"</text>
+      <line class="arrow" x1="340" y1="204" x2="340" y2="234"/>
+      <rect class="node green" x="240" y="238" width="200" height="40" rx="10"/>
+      <text class="label" x="340" y="262" text-anchor="middle" style="fill:#34d399">accept ← under budget</text>
+      <path class="arrow" d="M 240 174 Q 100 174 100 100" stroke-dasharray="4 4"/>
+      <text class="label dim mono" x="100" y="200" text-anchor="middle">reject &gt; budget</text>
+      <text class="label dim mono" x="100" y="216" text-anchor="middle">→ try next</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ===== SLIDE 13 — SRAM axis summary chart ===== -->
+<section class="sram">
+  <div class="num">13 / 30 — Part A wrap</div>
+  <h2>Part A — the SRAM axis at a glance</h2>
+  <div class="grid split">
+    <div style="height:380px"><canvas id="sram_breakdown" data-chart></canvas></div>
+    <div>
+      <div class="tech-card"><h4>A1 + A4 — scheduling</h4><p>~42% of the cut. Compile-time bin-packing is the big lever.</p></div>
+      <div class="tech-card"><h4>A2 — in-place DWConv</h4><p>~22%. One activation tensor saved per DW layer.</p></div>
+      <div class="tech-card"><h4>A3 — patch inference</h4><p>(not used in VWW0 — relevant when input is large)</p></div>
+      <div class="tech-card"><h4>A7 — TinyNAS shape</h4><p>Smaller input contributes ~28% indirectly.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 14 — Part B header ===== -->
+<section class="lat">
+  <div class="section-cover">
+    <span class="axis-tag lat">PART B · 10 techniques</span>
+    <h1 style="font-size:62px;margin:8px 0 14px"><span style="color:var(--purple)">How MCUNet</span><br>cuts cycles</h1>
+    <p class="sub" style="font-size:18px;max-width:880px">An interpreted runtime spends most of its cycles on dispatch, not math. Every technique here converts a runtime decision into a compile-time decision, or makes the math itself denser.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:24px">
+      <span class="badge lat">B1 no interpreter</span>
+      <span class="badge lat">B2 no dispatch</span>
+      <span class="badge lat">B3 known loop bounds</span>
+      <span class="badge lat">B4 specialized kernels</span>
+      <span class="badge lat">B5 SIMD intrinsics</span>
+      <span class="badge lat">B6 layer fusion</span>
+      <span class="badge lat">B7 inlined requant</span>
+      <span class="badge lat">B8 cache-friendly layout</span>
+      <span class="badge lat">B9 DTCM placement</span>
+      <span class="badge lat">B10 efficient blocks</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 15 — B1+B2 No interpreter, no dispatch ===== -->
+<section class="lat">
+  <div class="num">15 / 30 — B1 + B2 · TinyEngine</div>
+  <h2>B1. No interpreter · B2. No dispatch</h2>
+  <div class="grid split">
+    <div class="panel">
+      <pre style="margin-top:0"><code><span class="com">// TFLM — every frame</span>
+<span class="kw">for</span> (op : flatbuffer_ops) {
+  kernel = resolver.find(op.code);  <span class="com">// table lookup</span>
+  setup_tensors(op);                 <span class="com">// metadata read</span>
+  kernel.invoke(op.inputs, op.outputs);
+}
+
+<span class="com">// TinyEngine — generated once</span>
+<span class="kw">void</span> invoke() {
+  layer1_conv2d_int8();                       <span class="com">// direct call</span>
+  layer2_dw3x3_stride1_inplace();
+  layer3_pw1x1_int8();
+  <span class="com">/* ... linker resolves these at build time ... */</span>
+}</code></pre>
+    </div>
+    <ul>
+      <li><strong>B1</strong> — no FlatBuffer parsing, no interpreter loop</li>
+      <li><strong>B2</strong> — no resolver lookup; kernel call sites are baked</li>
+      <li>Compiler can <strong>inline</strong> small kernels at the call site</li>
+      <li>Avoids i-cache miss on cold function-pointer dispatch</li>
+      <li><strong>Magnitude</strong> — single-digit ms per frame across 50+ layers</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ===== SLIDE 16 — B3 Compile-time loop bounds ===== -->
+<section class="lat">
+  <div class="num">16 / 30 — B3 · TinyEngine</div>
+  <h2>B3. Compile-time loop bounds</h2>
+  <div class="grid c2">
+    <div class="panel" style="border-color:rgba(248,113,113,0.4)">
+      <h3 style="color:var(--red)">Generic kernel</h3>
+      <pre style="margin-top:6px"><code><span class="kw">for</span> (i = <span class="num1">0</span>; i &lt; out_h; i++)
+  <span class="kw">for</span> (j = <span class="num1">0</span>; j &lt; out_w; j++)
+    <span class="kw">for</span> (c = <span class="num1">0</span>; c &lt; out_c; c++)
+      <span class="com">// bounds unknown</span>
+      <span class="com">// → no unroll</span>
+      <span class="com">// → no SIMD</span></code></pre>
+    </div>
+    <div class="panel" style="border-color:rgba(192,132,252,0.4)">
+      <h3 style="color:var(--purple)">Specialized kernel</h3>
+      <pre style="margin-top:6px"><code><span class="kw">for</span> (i = <span class="num1">0</span>; i &lt; <span class="num1">32</span>; i++)
+  <span class="kw">for</span> (j = <span class="num1">0</span>; j &lt; <span class="num1">32</span>; j++)
+    <span class="kw">for</span> (c = <span class="num1">0</span>; c &lt; <span class="num1">96</span>; c++)
+      <span class="com">// fully unrollable</span>
+      <span class="com">// SMLAD/Helium fires</span>
+      <span class="com">// 2–4× faster</span></code></pre>
+    </div>
+  </div>
+  <ul style="margin-top:14px">
+    <li><strong>Mechanism</strong> — every layer's shape is known at codegen → bounds become literals</li>
+    <li><strong>Magnitude</strong> — <span style="color:var(--green);font-weight:600">2–4× on inner loops</span> on Cortex-M4F / M7</li>
+    <li><strong>Cost</strong> — flash size grows (each shape = its own kernel) — paid in plentiful flash</li>
+  </ul>
+</section>
+
+<!-- ===== SLIDE 17 — B4 Specialized per-shape kernels ===== -->
+<section class="lat">
+  <div class="num">17 / 30 — B4 · TinyEngine</div>
+  <h2>B4. Specialized per-shape kernels</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — separate <code>.c</code> file per (kernel size, stride, channel regime) combo</li>
+      <li><strong>Why it works</strong> — generic kernels carry shape-dependent branches in the inner loop</li>
+      <li>Padding, dilation, requantization constants — <strong>all baked in</strong></li>
+      <li><strong>Cost</strong> — flash bytes only</li>
+      <li>Compounds with <span class="badge lat">B3</span> to deliver the bulk of TinyEngine's per-layer speedup</li>
+    </ul>
+    <div class="panel">
+      <h3>From this project's codegen/Source/</h3>
+      <pre style="margin-top:6px"><code><span class="com">// 18 in-place DW kernels alone</span>
+depthwise_kernel<span class="num1">3x3</span>_stride<span class="num1">1</span>_inplace_CHW_fpreq.c
+depthwise_kernel<span class="num1">3x3</span>_stride<span class="num1">1</span>_inplace_CHW_fpreq_mask.c
+depthwise_kernel<span class="num1">3x3</span>_stride<span class="num1">1</span>_inplace_CHW_fpreq_bitmask.c
+depthwise_kernel<span class="num1">3x3</span>_stride<span class="num1">2</span>_*  <span class="com">// 3 variants</span>
+depthwise_kernel<span class="num1">5x5</span>_stride<span class="num1">1</span>_*  <span class="com">// 3 variants</span>
+depthwise_kernel<span class="num1">5x5</span>_stride<span class="num1">2</span>_*  <span class="com">// 3 variants</span>
+depthwise_kernel<span class="num1">7x7</span>_stride<span class="num1">1</span>_*  <span class="com">// 3 variants</span>
+depthwise_kernel<span class="num1">7x7</span>_stride<span class="num1">2</span>_*  <span class="com">// 3 variants</span>
+
+<span class="com">// + specialized convolve_*, pooling_*, fc_*</span></code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 18 — B5 ARM SIMD intrinsics ===== -->
+<section class="lat">
+  <div class="num">18 / 30 — B5 · TinyEngine + CMSIS-DSP</div>
+  <h2>B5. ARM SIMD intrinsics</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — packed-SIMD instructions on Cortex-M4F+</li>
+      <li><code>SMLAD</code> — 2× 16-bit MAC per cycle (signed)</li>
+      <li><code>SMLALD</code> — same, with 64-bit accumulator</li>
+      <li>Helium (M55, M85) — full vector instructions, ~8 int8 MACs/cycle</li>
+      <li><strong>Magnitude</strong> — <span style="color:var(--green);font-weight:600">2–4×</span> vs. scalar code on the same MCU</li>
+    </ul>
+    <svg class="diagram" viewBox="0 0 460 240">
+      <text class="label dim mono" x="80" y="20">Scalar int8 MAC</text>
+      <g>
+        <rect fill="rgba(192,132,252,0.5)" x="20" y="40" width="40" height="30" rx="3"/>
+        <text class="label mono" x="40" y="58" text-anchor="middle" style="font-size:11px">a×b</text>
+        <rect fill="rgba(192,132,252,0.5)" x="68" y="40" width="40" height="30" rx="3"/>
+        <text class="label mono" x="88" y="58" text-anchor="middle" style="font-size:11px">a×b</text>
+        <rect fill="rgba(192,132,252,0.5)" x="116" y="40" width="40" height="30" rx="3"/>
+        <text class="label mono" x="136" y="58" text-anchor="middle" style="font-size:11px">a×b</text>
+        <rect fill="rgba(192,132,252,0.5)" x="164" y="40" width="40" height="30" rx="3"/>
+        <text class="label mono" x="184" y="58" text-anchor="middle" style="font-size:11px">a×b</text>
+      </g>
+      <text class="label dim mono" x="20" y="90">4 cycles → 4 MACs</text>
+      <text class="label acc" x="80" y="120" style="font-weight:600">SMLAD (M4F)</text>
+      <rect fill="rgba(34,211,238,0.55)" stroke="#22d3ee" stroke-width="2" x="20" y="138" width="184" height="34" rx="4"/>
+      <text class="label" x="112" y="160" text-anchor="middle" style="font-weight:600">2 MACs in 1 cycle</text>
+      <text class="label acc" x="280" y="120" style="font-weight:600">Helium (M55)</text>
+      <rect fill="rgba(52,211,153,0.55)" stroke="#34d399" stroke-width="2" x="220" y="138" width="220" height="34" rx="4"/>
+      <text class="label" x="330" y="160" text-anchor="middle" style="font-weight:600">8 int8 MACs in 1 cycle</text>
+      <text class="label" x="120" y="200" text-anchor="middle" style="fill:#34d399;font-weight:600">2× faster</text>
+      <text class="label" x="330" y="200" text-anchor="middle" style="fill:#34d399;font-weight:600">8× faster</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ===== SLIDE 19 — B6 Layer fusion ===== -->
+<section class="lat">
+  <div class="num">19 / 30 — B6 · TinyEngine</div>
+  <h2>B6. Layer fusion</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — Conv + BN + ReLU + (residual add) emitted as one kernel; BN folded into Conv weights</li>
+      <li><strong>Why latency</strong> — 4 SRAM round-trips collapse to 1; intermediates stay in registers</li>
+      <li>SRAM bandwidth (AXIM) is the M7 bottleneck for many layers</li>
+      <li><strong>Cost</strong> — debug granularity (no breakpoint between BN and ReLU)</li>
+      <li><strong>Magnitude</strong> — <span style="color:var(--green);font-weight:600">10–30%</span> on bandwidth-bound layers</li>
+    </ul>
+    <svg class="diagram" viewBox="0 0 460 280">
+      <text class="label dim mono" x="80" y="22">Unfused — 4 round-trips</text>
+      <rect class="node red" x="30" y="34" width="140" height="34" rx="6"/>
+      <text class="label" x="100" y="56" text-anchor="middle">Conv</text>
+      <line class="arrow" x1="100" y1="68" x2="100" y2="84"/>
+      <rect class="node red" x="30" y="86" width="140" height="34" rx="6"/>
+      <text class="label" x="100" y="108" text-anchor="middle">BatchNorm</text>
+      <line class="arrow" x1="100" y1="120" x2="100" y2="136"/>
+      <rect class="node red" x="30" y="138" width="140" height="34" rx="6"/>
+      <text class="label" x="100" y="160" text-anchor="middle">ReLU</text>
+      <line class="arrow" x1="100" y1="172" x2="100" y2="188"/>
+      <rect class="node red" x="30" y="190" width="140" height="34" rx="6"/>
+      <text class="label" x="100" y="212" text-anchor="middle">Add (residual)</text>
+      <text class="label" x="100" y="252" text-anchor="middle" style="fill:#f87171;font-weight:600">read+write × 4</text>
+      <text class="label purple" x="370" y="22" style="font-weight:600">Fused — 1 round-trip</text>
+      <rect class="node purple" x="290" y="80" width="160" height="120" rx="10"/>
+      <text class="label purple" x="370" y="118" text-anchor="middle" style="font-weight:600">conv_bn_relu_add</text>
+      <text class="label dim mono" x="370" y="140" text-anchor="middle">single loop</text>
+      <text class="label dim mono" x="370" y="158" text-anchor="middle">one read, one write</text>
+      <text class="label dim mono" x="370" y="176" text-anchor="middle">per output element</text>
+      <text class="label" x="370" y="252" text-anchor="middle" style="fill:#34d399;font-weight:600">4× less bandwidth</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ===== SLIDE 20 — B7 Inlined requantization ===== -->
+<section class="lat">
+  <div class="num">20 / 30 — B7 · TinyEngine</div>
+  <h2>B7. Inlined requantization constants</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — int32 accumulator → int8 output requires <em>multiplier × shift + zero-point</em></li>
+      <li>TFLM looks these up <em>per layer, per call</em>; TinyEngine bakes them as <code>#define</code> constants</li>
+      <li><strong>Why it works</strong> — compiler emits immediate-mode instructions, skips per-call setup math</li>
+      <li><strong>Cost</strong> — none</li>
+      <li><strong>Magnitude</strong> — small per layer, accumulates to a couple percent end-to-end</li>
+    </ul>
+    <div class="panel">
+      <pre style="margin-top:0"><code><span class="com">// TFLM</span>
+quant_t* q = tensor-&gt;quantization;       <span class="com">// pointer chase</span>
+int32_t mult = q-&gt;output_multiplier;
+int32_t shift = q-&gt;output_shift;
+out = requantize(acc, mult, shift, zp);
+
+<span class="com">// TinyEngine — emitted per layer</span>
+<span class="kw">#define</span> LAYER12_MULT <span class="num1">1374019256</span>
+<span class="kw">#define</span> LAYER12_SHIFT <span class="num1">-7</span>
+<span class="kw">#define</span> LAYER12_ZP    <span class="num1">-128</span>
+out = requantize(acc, LAYER12_MULT, LAYER12_SHIFT, LAYER12_ZP);
+<span class="com">// → compiles to a single MUL + ASR + ADD on M7</span></code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 21 — B8 Cache-friendly layout ===== -->
+<section class="lat">
+  <div class="num">21 / 30 — B8 · TinyEngine</div>
+  <h2>B8. Cache-friendly memory layout</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — layout chosen <em>per kernel</em>, not globally</li>
+      <li><strong>DWConv → CHW</strong> (channel-first) so each channel's H×W is contiguous</li>
+      <li><strong>PWConv (1×1) → HWC</strong> so the channel axis (the contracted axis) streams</li>
+      <li>Transposes fused into the previous kernel where possible</li>
+      <li><strong>Magnitude</strong> — single-digit to ~20% latency, more on parts with smaller D-cache</li>
+    </ul>
+    <svg class="diagram" viewBox="0 0 460 260">
+      <text class="label acc" x="80" y="20" style="font-weight:600">DWConv inner loop</text>
+      <text class="label dim mono" x="80" y="40">CHW → contiguous H×W per channel</text>
+      <g>
+        <rect fill="rgba(34,211,238,0.55)" x="20" y="60" width="20" height="20"/>
+        <rect fill="rgba(34,211,238,0.55)" x="42" y="60" width="20" height="20"/>
+        <rect fill="rgba(34,211,238,0.55)" x="64" y="60" width="20" height="20"/>
+        <rect fill="rgba(34,211,238,0.55)" x="86" y="60" width="20" height="20"/>
+        <rect fill="rgba(34,211,238,0.55)" x="108" y="60" width="20" height="20"/>
+        <rect fill="rgba(34,211,238,0.55)" x="130" y="60" width="20" height="20"/>
+        <rect fill="rgba(34,211,238,0.55)" x="152" y="60" width="20" height="20"/>
+      </g>
+      <text class="label" x="100" y="100" text-anchor="middle" style="fill:#34d399;font-weight:600">stream-friendly</text>
+      <text class="label purple" x="340" y="20" style="font-weight:600">PWConv inner loop</text>
+      <text class="label dim mono" x="340" y="40">HWC → channels contiguous (contracted axis)</text>
+      <g>
+        <rect fill="rgba(192,132,252,0.55)" x="240" y="60" width="14" height="20"/>
+        <rect fill="rgba(192,132,252,0.55)" x="256" y="60" width="14" height="20"/>
+        <rect fill="rgba(192,132,252,0.55)" x="272" y="60" width="14" height="20"/>
+        <rect fill="rgba(192,132,252,0.55)" x="288" y="60" width="14" height="20"/>
+        <rect fill="rgba(192,132,252,0.55)" x="304" y="60" width="14" height="20"/>
+        <rect fill="rgba(192,132,252,0.55)" x="320" y="60" width="14" height="20"/>
+        <rect fill="rgba(192,132,252,0.55)" x="336" y="60" width="14" height="20"/>
+        <rect fill="rgba(192,132,252,0.55)" x="352" y="60" width="14" height="20"/>
+        <rect fill="rgba(192,132,252,0.55)" x="368" y="60" width="14" height="20"/>
+        <rect fill="rgba(192,132,252,0.55)" x="384" y="60" width="14" height="20"/>
+        <rect fill="rgba(192,132,252,0.55)" x="400" y="60" width="14" height="20"/>
+        <rect fill="rgba(192,132,252,0.55)" x="416" y="60" width="14" height="20"/>
+      </g>
+      <text class="label" x="335" y="100" text-anchor="middle" style="fill:#34d399;font-weight:600">SIMD-pack-friendly</text>
+      <text class="label dim mono" x="20" y="160">Wrong layout for the kernel = D-cache thrash =</text>
+      <text class="label" x="20" y="180" style="fill:#f87171;font-weight:600">2–3× slower inner loop</text>
+      <text class="label dim mono" x="20" y="220">TinyEngine schedules transposes between kernels</text>
+      <text class="label dim mono" x="20" y="238">where layouts differ — fused into previous pass</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ===== SLIDE 22 — B9 DTCM placement ===== -->
+<section class="lat">
+  <div class="num">22 / 30 — B9 · Deployment</div>
+  <h2>B9. DTCM placement of activation arena</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — Cortex-M7 has Tightly-Coupled Memory (DTCM/ITCM): dedicated bus, single-cycle, no cache</li>
+      <li>TinyEngine reports the exact <code>PEAK_MEM</code>; place that buffer in DTCM</li>
+      <li><strong>Why it works</strong> — every kernel read/write bypasses AXIM and L1 D-cache</li>
+      <li><strong>Cost</strong> — only on M7 / M55 / M85; M0/M3/M4 don't have DTCM</li>
+      <li><strong>Magnitude</strong> — <span style="color:var(--green);font-weight:600">1.5–3×</span> on memory-bound kernels — single biggest deployment-time lever</li>
+    </ul>
+    <div class="panel">
+      <pre style="margin-top:0"><code><span class="com">// One linker-attributed line gets the whole win</span>
+<span class="kw">static</span> <span class="kw">int8_t</span> buffer0[PEAK_MEM]
+    __attribute__((section(<span class="str">".dtcm"</span>)));
+
+<span class="com">// linker.ld</span>
+.dtcm (NOLOAD) : {
+    *(.dtcm)
+} &gt; DTCM            <span class="com">// 64KB single-cycle bank</span></code></pre>
+      <p style="color:var(--fg-dim);font-size:13px;margin:10px 0 0">If the activation arena fits in DTCM, every kernel's hot path becomes single-cycle. If not, fall back to SRAM.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 23 — B10 TinyNAS efficient blocks ===== -->
+<section class="lat">
+  <div class="num">23 / 30 — B10 · TinyNAS</div>
+  <h2>B10. TinyNAS picks compute-efficient blocks</h2>
+  <div class="grid split">
+    <ul>
+      <li><strong>Mechanism</strong> — search over MBConv (mobile inverted bottleneck) blocks: expansion ratio, kernel size, depth, width</li>
+      <li><strong>Cost function</strong> — accuracy at fixed FLOPs and fixed peak SRAM</li>
+      <li>Latency calibrated per-MCU from FLOPs</li>
+      <li><strong>Magnitude</strong> — <span style="color:var(--green);font-weight:600">3–5× FLOPs reduction</span> from block family alone, +10–30% from configuration</li>
+    </ul>
+    <svg class="diagram" viewBox="0 0 460 240">
+      <text class="label dim mono" x="80" y="20">Standard 3×3 conv</text>
+      <rect class="node red" x="20" y="36" width="160" height="50" rx="6"/>
+      <text class="label" x="100" y="62" text-anchor="middle">3×3 × Cin × Cout</text>
+      <text class="label dim mono mono" x="100" y="80" text-anchor="middle">9·Cin·Cout MACs/pixel</text>
+      <text class="label" x="100" y="120" text-anchor="middle" style="fill:#f87171;font-weight:600">baseline</text>
+      <text class="label purple" x="340" y="20" style="font-weight:600">MBConv block</text>
+      <rect class="node purple" x="240" y="36" width="80" height="50" rx="6"/>
+      <text class="label purple" x="280" y="62" text-anchor="middle">1×1 PW</text>
+      <text class="label dim mono" x="280" y="80" text-anchor="middle">expand</text>
+      <rect class="node purple" x="320" y="36" width="50" height="50" rx="6"/>
+      <text class="label purple" x="345" y="62" text-anchor="middle">DW</text>
+      <rect class="node purple" x="370" y="36" width="80" height="50" rx="6"/>
+      <text class="label purple" x="410" y="62" text-anchor="middle">1×1 PW</text>
+      <text class="label dim mono" x="410" y="80" text-anchor="middle">project</text>
+      <text class="label dim mono mono" x="345" y="110" text-anchor="middle">9·C + 2·C·exp·C MACs</text>
+      <text class="label" x="345" y="140" text-anchor="middle" style="fill:#34d399;font-weight:600">~9× fewer FLOPs</text>
+      <text class="label" x="345" y="158" text-anchor="middle" style="fill:#34d399">at equivalent accuracy</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ===== SLIDE 24 — Latency axis summary chart ===== -->
+<section class="lat">
+  <div class="num">24 / 30 — Part B wrap</div>
+  <h2>Part B — the latency axis at a glance</h2>
+  <div class="grid split">
+    <div style="height:380px"><canvas id="lat_breakdown" data-chart></canvas></div>
+    <div>
+      <div class="tech-card"><h4>B10 — TinyNAS shape</h4><p>Smaller input → fewer FLOPs is the dominant ~3× factor for VWW0.</p></div>
+      <div class="tech-card"><h4>B3 + B4 — kernels</h4><p>Specialization + unrolling adds ~1.3× on top.</p></div>
+      <div class="tech-card"><h4>B6 — fusion</h4><p>~1.15× from cutting bandwidth round-trips.</p></div>
+      <div class="tech-card"><h4>B1 + B2 — no interpreter</h4><p>~1.05× free.</p></div>
+      <p style="color:var(--fg-dim);font-size:13px;margin-top:8px">Multipliers compound multiplicatively — net ≈ 5×.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 25 — Part C cross-cutting ===== -->
+<section>
+  <div class="num">25 / 30 — Part C · Both axes</div>
+  <h2>Cross-cutting techniques</h2>
+  <p class="sub">Three preconditions that enable everything in Part A and Part B.</p>
+  <div class="grid c3" style="margin-top:18px">
+    <div class="panel">
+      <h3 style="color:var(--acc)">C1. Static scheduling</h3>
+      <p style="color:var(--fg-dim);font-size:14px;margin:0 0 10px">Single-pass, codegen-time decision of <em>everything</em> — buffer offsets, kernel selection, op order.</p>
+      <span class="axis-pill sram">SRAM</span><span class="axis-pill lat">cycles</span>
+      <p style="color:var(--fg-dim);font-size:13px;margin:10px 0 0">Without this, A1, A4, B3, B4 cannot run.</p>
+    </div>
+    <div class="panel">
+      <h3 style="color:var(--acc)">C2. Per-channel int8 quant</h3>
+      <p style="color:var(--fg-dim);font-size:14px;margin:0 0 10px">int8 weights with per-channel scales, int8 activations with per-tensor scales — same scheme as TFLM-int8.</p>
+      <span class="axis-pill sram">SRAM</span><span class="axis-pill lat">cycles</span>
+      <p style="color:var(--fg-dim);font-size:13px;margin:10px 0 0">Halves the working set, enables packed-SIMD MACs.</p>
+    </div>
+    <div class="panel">
+      <h3 style="color:var(--acc)">C3. Co-design</h3>
+      <p style="color:var(--fg-dim);font-size:14px;margin:0 0 10px">TinyNAS searches "things TinyEngine can run efficiently" — TinyEngine optimizes "things TinyNAS produces."</p>
+      <span class="axis-pill both">both</span>
+      <p style="color:var(--fg-dim);font-size:13px;margin:10px 0 0">The biggest meta-technique. Restricts the search space to the intersection.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 26 — VWW0 SRAM breakdown ===== -->
+<section class="sram">
+  <div class="num">26 / 30 — Case study · SRAM</div>
+  <h2>VWW0 on PIC32CZ-CA — SRAM axis</h2>
+  <div class="grid split">
+    <div style="height:300px"><canvas id="sram_compare" data-chart></canvas></div>
+    <table>
+      <tr><th>Source of saving</th><th>Approx. share</th></tr>
+      <tr><td>Smaller input (A7)</td><td class="win">~28%</td></tr>
+      <tr><td>Global memory schedule (A1)</td><td class="win">~42%</td></tr>
+      <tr><td>In-place DWConv + reorder (A2, A4)</td><td class="win">~22%</td></tr>
+      <tr><td>Fusion + other</td><td class="win">~8%</td></tr>
+      <tr><td><strong>Net effect</strong></td><td class="win"><strong>−76%</strong></td></tr>
+    </table>
+  </div>
+  <p class="sub" style="margin-top:14px;text-align:center">257,448 B → <span style="color:var(--green);font-weight:600">60,800 B</span>. Allocation now succeeds on a 256 KB SRAM part with headroom to spare.</p>
+</section>
+
+<!-- ===== SLIDE 27 — VWW0 latency breakdown ===== -->
+<section class="lat">
+  <div class="num">27 / 30 — Case study · Latency</div>
+  <h2>VWW0 on PIC32CZ-CA — latency axis</h2>
+  <div class="grid split">
+    <div style="height:300px"><canvas id="lat_compare" data-chart></canvas></div>
+    <table>
+      <tr><th>Source of saving</th><th>Multiplier</th></tr>
+      <tr><td>Smaller input → fewer FLOPs (B10)</td><td class="win">×3.0</td></tr>
+      <tr><td>Specialized kernels + unrolling (B3, B4)</td><td class="win">×1.3</td></tr>
+      <tr><td>Layer fusion (B6)</td><td class="win">×1.15</td></tr>
+      <tr><td>No interpreter (B1, B2)</td><td class="win">×1.05</td></tr>
+      <tr><td><strong>Net</strong></td><td class="win"><strong>≈×5</strong></td></tr>
+    </table>
+  </div>
+  <p class="sub" style="margin-top:14px;text-align:center">~330 ms → <span style="color:var(--green);font-weight:600">&lt;70 ms</span>. Now well above the 10 fps target the model was named for.</p>
+</section>
+
+<!-- ===== SLIDE 28 — VWW0 tradeoffs ===== -->
+<section>
+  <div class="num">28 / 30 — Case study · Tradeoffs</div>
+  <h2>What we paid to get there</h2>
+  <div class="grid split">
+    <table>
+      <tr><th>Cost</th><th>Magnitude</th></tr>
+      <tr><td>Flash weights</td><td>190,864 B → 399,656 B (+109%)</td></tr>
+      <tr><td>Layer count</td><td>70 → 51 (different topology)</td></tr>
+      <tr><td>Op coverage</td><td>YOLO-style heads gone</td></tr>
+      <tr><td>Runtime model swap</td><td>not supported (re-flash)</td></tr>
+    </table>
+    <div class="panel">
+      <h3>Why the flash grew</h3>
+      <p style="color:var(--fg-dim);font-size:14px;margin:0 0 8px">Different model. TinyNAS gave VWW0 wider channels (up to 480) and 7×7 DW kernels because the input is small (64×64) — capacity has to go somewhere.</p>
+      <p style="color:var(--fg-dim);font-size:14px;margin:0 0 8px">Classifier shape: narrow spatial, wide channels. Detector (YOLO) does the opposite.</p>
+      <p style="color:var(--acc-2);font-size:14px;margin:0">On PIC32CZ-CA, flash is plentiful (4 MB) and SRAM is scarce — this trade is exactly right.</p>
+    </div>
+  </div>
+  <p class="sub" style="margin-top:14px;text-align:center">The flash growth is <strong>not a TinyEngine artifact</strong> — it's the model. Apples-to-apples on the same network, weights are ~equal.</p>
+</section>
+
+<!-- ===== SLIDE 29 — When to pick MCUNet ===== -->
+<section>
+  <div class="num">29 / 30 — Decision rule</div>
+  <h2>When to pick MCUNet, when to stay with TFLM</h2>
+  <div class="grid split">
+    <div style="height:380px"><canvas id="radar" data-chart></canvas></div>
+    <div>
+      <div class="panel" style="border-color:rgba(34,211,238,0.4);margin-bottom:12px">
+        <h3 style="color:var(--acc)">Pick MCUNet when</h3>
+        <ul style="margin:6px 0">
+          <li>SRAM is the binding constraint</li>
+          <li>Latency target is hard (FPS / real-time)</li>
+          <li>Model is locked-down for shipping</li>
+          <li>MobileNet-shaped network</li>
+        </ul>
+      </div>
+      <div class="panel" style="border-color:rgba(248,113,113,0.4)">
+        <h3 style="color:var(--red)">Stay with TFLM when</h3>
+        <ul style="margin:6px 0">
+          <li>You need runtime model swap</li>
+          <li>SRAM isn't the bottleneck</li>
+          <li>Network uses exotic / custom ops</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SLIDE 30 — Q&A ===== -->
+<section><div class="center">
+  <div class="qa-big">Q &amp; A</div>
+  <p class="sub" style="margin-top:24px;text-align:center;font-size:18px">Two axes. Twenty-some techniques. One co-designed framework.</p>
+  <div style="margin-top:20px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap">
+    <span class="axis-pill sram">SRAM ↓ — A1…A7</span>
+    <span class="axis-pill lat">cycles ↓ — B1…B10</span>
+    <span class="axis-pill both">both — C1…C3</span>
+  </div>
+  <p style="font-family:var(--mono);font-size:12px;color:var(--fg-mute);margin-top:36px">Source: docs/MCUNet_optimizations.md · case study: CONTEXT.md, codegen/Source/</p>
+</div></section>
+
+
+</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+Reveal.initialize({
+  hash:true, slideNumber:'c/t', controls:true, progress:true,
+  transition:'slide', transitionSpeed:'fast',
+  width:1280, height:760, margin:0.04,
+  plugins:[RevealNotes]
+});
+Chart.defaults.color = '#9aa8c2';
+Chart.defaults.font.family = "Inter, system-ui, sans-serif";
+Chart.defaults.borderColor = '#1f2c47';
+
+window.chart_sram_breakdown = function(c){
+  new Chart(c, {type:'bar',
+    data:{labels:['Smaller input\n(160→64)','Global memory\nscheduling (A1)','In-place DWConv\n+ reorder (A2,A4)','Layer fusion\n+ other'],
+      datasets:[{label:'% of 196.6 KB cut', data:[28,42,22,8],
+        backgroundColor:['rgba(34,211,238,0.45)','rgba(34,211,238,0.85)','rgba(34,211,238,0.65)','rgba(34,211,238,0.35)'],
+        borderColor:'#22d3ee', borderWidth:2, borderRadius:6}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        title:{display:true,text:'Where the −76% SRAM cut comes from',color:'#e6ecf5',font:{size:14,weight:'600'}},
+        tooltip:{callbacks:{label:function(ctx){return ctx.parsed.x+'% of cut'}}}},
+      scales:{x:{beginAtZero:true,max:50,grid:{color:'#1f2c47'},ticks:{callback:function(v){return v+'%'}}},
+        y:{grid:{display:false}}}}});
+};
+window.chart_lat_breakdown = function(c){
+  new Chart(c, {type:'bar',
+    data:{labels:['Smaller input\n→ fewer FLOPs','Specialized kernels\n+ unrolling','SIMD on M7\n(via CMSIS-NN)','Layer fusion','No interpreter\n+ no dispatch'],
+      datasets:[{label:'multiplier', data:[3.0,1.3,1.0,1.15,1.05],
+        backgroundColor:['rgba(192,132,252,0.85)','rgba(192,132,252,0.7)','rgba(192,132,252,0.45)','rgba(192,132,252,0.55)','rgba(192,132,252,0.35)'],
+        borderColor:'#c084fc', borderWidth:2, borderRadius:6}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        title:{display:true,text:'Stacking the ~5× latency speedup',color:'#e6ecf5',font:{size:14,weight:'600'}},
+        tooltip:{callbacks:{label:function(ctx){return '×'+ctx.parsed.x.toFixed(2)}}}},
+      scales:{x:{beginAtZero:true,grid:{color:'#1f2c47'},ticks:{callback:function(v){return '×'+v}}},
+        y:{grid:{display:false}}}}});
+};
+window.chart_sram_compare = function(c){
+  new Chart(c, {type:'bar',
+    data:{labels:['YOLO\n(old)','VWW0+TE\n(new)'],
+      datasets:[{label:'Peak SRAM (KB)', data:[251.4,59.4],
+        backgroundColor:['rgba(248,113,113,0.6)','rgba(52,211,153,0.7)'],
+        borderColor:['#f87171','#34d399'], borderWidth:2, borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        title:{display:true,text:'Peak SRAM (KB) — lower is better',color:'#e6ecf5',font:{size:14,weight:'600'}}},
+      scales:{y:{beginAtZero:true,grid:{color:'#1f2c47'}},x:{grid:{display:false}}}}});
+};
+window.chart_lat_compare = function(c){
+  new Chart(c, {type:'bar',
+    data:{labels:['YOLO\n(old)','VWW0+TE\n(new)'],
+      datasets:[{label:'Inference (ms)', data:[330,70],
+        backgroundColor:['rgba(248,113,113,0.6)','rgba(52,211,153,0.7)'],
+        borderColor:['#f87171','#34d399'], borderWidth:2, borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        title:{display:true,text:'Inference latency (ms) — lower is better',color:'#e6ecf5',font:{size:14,weight:'600'}}},
+      scales:{y:{beginAtZero:true,grid:{color:'#1f2c47'}},x:{grid:{display:false}}}}});
+};
+window.chart_axes = function(c){
+  new Chart(c, {type:'scatter',
+    data:{datasets:[
+      {label:'TFLM',data:[{x:330,y:251}],backgroundColor:'#f87171',borderColor:'#f87171',pointRadius:14,pointStyle:'rectRot'},
+      {label:'TinyEngine + VWW0',data:[{x:70,y:60}],backgroundColor:'#22d3ee',borderColor:'#22d3ee',pointRadius:14,pointStyle:'circle'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{title:{display:true,text:'Operating point on both axes — lower-left is better',color:'#e6ecf5',font:{size:14,weight:'600'}},
+        legend:{labels:{color:'#e6ecf5'}}},
+      scales:{
+        x:{title:{display:true,text:'Inference latency (ms)',color:'#9aa8c2'},grid:{color:'#1f2c47'},min:0},
+        y:{title:{display:true,text:'Peak SRAM (KB)',color:'#9aa8c2'},grid:{color:'#1f2c47'},min:0}}}});
+};
+window.chart_radar = function(c){
+  new Chart(c, {type:'radar',
+    data:{labels:['Peak SRAM','Latency','Flash size','Op coverage','Model swap','Debuggability'],
+      datasets:[
+        {label:'TFLM', data:[3,3,4,5,5,4], backgroundColor:'rgba(248,113,113,0.18)', borderColor:'#f87171', borderWidth:2, pointBackgroundColor:'#f87171'},
+        {label:'TinyEngine', data:[5,5,3,3,1,4], backgroundColor:'rgba(34,211,238,0.20)', borderColor:'#22d3ee', borderWidth:2, pointBackgroundColor:'#22d3ee'}
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{title:{display:true,text:'Capability profile (5 = best)',color:'#e6ecf5',font:{size:14,weight:'600'}},
+        legend:{labels:{color:'#e6ecf5'}}},
+      scales:{r:{angleLines:{color:'#1f2c47'},grid:{color:'#1f2c47'},
+        pointLabels:{color:'#e6ecf5',font:{size:12}},
+        ticks:{display:false,stepSize:1},min:0,max:5}}}});
+};
+
+function lazyInitCharts(slide){
+  if(!slide) return;
+  slide.querySelectorAll('canvas[data-chart]').forEach(function(c){
+    if(c.dataset.inited) return;
+    c.dataset.inited='1';
+    var fn = window['chart_'+c.id];
+    if(fn) try{fn(c);}catch(e){console.error(e);}
+  });
+}
+Reveal.on('slidechanged', function(e){ lazyInitCharts(e.currentSlide); });
+window.addEventListener('load', function(){ lazyInitCharts(document.querySelector('.reveal .slides section.present')||document.querySelector('.reveal .slides section')); });
+</script>
+</body>
+</html>

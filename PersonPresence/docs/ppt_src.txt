@@ -1,0 +1,406 @@
+# Slide 1 — TinyEngine: High-Performance Inference for Resource-Constrained MCUs
+
+* From TFLM Runtime to System–Algorithm Co-Design
+* Presenter: Embedded-ML Staff Engineer
+* Target: Engineers already shipping with TFLM
+* Focus: Generated code vs. interpreted graphs
+
+Speaker notes: Today we are moving beyond the standard TFLM interpreter to look at the TinyEngine project from MIT HAN Lab. You already know how to manage tensor arenas and op resolvers, so we won't waste time on the basics. By the end of this hour, you will understand how shifting from a runtime interpreter to a compile-time code generator provides the SRAM and latency headroom needed for vision-class workloads on Cortex-M.
+
+# Slide 2 — The MCU Envelope
+
+* SRAM: 128 KB – 1 MB
+* Flash: 512 KB – 4 MB
+* Cortex-M4/M7: 100 – 600 MHz
+* Power: Single-digit mW budgets
+* SRAM is the binding constraint for vision
+
+Speaker notes: When we talk about "TinyML," the hard ceiling is almost always SRAM, not flash. While we can easily hang a 16MB QSPI flash chip off an MCU, we are stuck with the on-chip SRAM for activations. For vision tasks, we often find that a model fits in flash, but the peak workspace exceeds the internal memory of even a high-end Cortex-M7.
+
+# Slide 3 — Why Activations Break the Budget
+
+* Weights live in Flash (cheap/abundant)
+* Activations live in SRAM (scarce/expensive)
+* Example: 160x160x16 int8 feature map
+* 160 * 160 * 16 = 409,600 bytes
+* Fails on a 256 KB SRAM part immediately
+
+Speaker notes: The math for vision is brutal. A relatively small 160x160 feature map with 16 channels consumes over 400 KB if we materialise the entire tensor in SRAM. This is the "memory wall" where standard MobileNet-v2 architectures fail on typical Cortex-M hardware. We need a way to reduce that peak workspace without losing the representational power of the network.
+
+# Slide 4 — TFLM at a Glance
+
+```
+Model (.tflite)
+|
+v
+MicroInterpreter <--- AllOpsResolver
+|
+v
+Tensor Arena (Greedy Workspace)
+|
+v
+CMSIS-NN / Kernels
+
+```
+
+* Portable and generic
+* Single binary covers many models
+* Flexible deployment
+
+Speaker notes: You are all familiar with this pipeline. TFLM is fantastic because it's a "one size fits all" runtime where you just swap the FlatBuffer and go. However, that flexibility comes with overhead that we often can't afford when pushing the absolute limits of the hardware. The interpreter-based model is the source of several inefficiencies we will address.
+
+# Slide 5 — Where TFLM Leaves Performance on the Table
+
+* Per-invocation operator dispatch overhead
+* Greedy arena allocator lacks future visibility
+* Generic kernels branch on shape/stride at runtime
+* Interpreter and resolver tables consume Flash
+* Trade-off: Flexibility vs. Efficiency
+
+Speaker notes: TFLM's greedy allocator only sees what tensors are currently needed; it doesn't have a global view of the entire graph lifetime during allocation. Furthermore, because TFLM kernels are generic, they contain internal logic to handle different strides, paddings, and channel counts. This branching happens every time an op is called, wasting cycles that could be saved if the kernel were specialized for a specific layer.
+
+# Slide 6 — MCUNet in One Picture
+
+```
++-----------+       +------------+
+|  TinyNAS  | <---> | TinyEngine |
++-----------+       +------------+
+      |                   |
+      +----[ Output ]-----+
+             |
+             v
+       Optimized MCU
+
+```
+
+* Automated Search + Specialized Runtime
+* TinyNAS finds the network architecture
+* TinyEngine executes that specific architecture
+
+Speaker notes: TinyEngine shouldn't be viewed in isolation; it is part of the MCUNet co-design framework. TinyNAS searches for a neural architecture while constantly querying TinyEngine to see if that specific configuration can actually run within the memory constraints. This ensures we never find a "great" model that is impossible to deploy on our target 256KB or 512KB SRAM part.
+
+# Slide 7 — Code-generation, Not Interpretation
+
+* Ingests Quantized TFLite
+* Emits straight-line C code
+* No interpreter or resolver
+* No FlatBuffer parsing at runtime
+* The "engine" is the generator script
+
+Speaker notes: The fundamental shift here is from an interpreter to a compiler. TinyEngine takes your TFLite file and generates a dedicated C function for every single layer in your model. What eventually runs on your Cortex-M is just a sequence of function calls with no runtime decision-making, no string lookups, and no virtual dispatch.
+
+# Slide 8 — Codegen Pipeline
+
+```
+TFLite Model
+|
+v [Graph Analyzer] --- Lifetime Birth/Death
+|
+v [Memory Scheduler] - Buffer Packing
+|
+v [Op Generator] ----- Specialized C
+|
+v Emitted C + Weights + Headers
+
+```
+
+Speaker notes: The pipeline starts with a graph analyzer that maps out exactly when every tensor is born and when it dies. The memory scheduler then uses that data to pack buffers optimally. Finally, the operator generator produces specialized C kernels that have things like loop bounds and strides hard-coded, allowing the compiler to perform much better optimization than it could with generic library code.
+
+# Slide 9 — What the Graph Analyzer Sees
+
+* Exact tensor shapes and types
+* Precise birth/death op indices
+* Inter-op dependency chains
+* Full-graph visibility
+* Contrast: TFLM is greedy/local
+
+Speaker notes: Unlike TFLM, which resolves lifetimes dynamically, the TinyEngine analyzer knows the entire execution order before a single line of C is written. It knows that Tensor A is used by Op 1 and Op 2, but is dead by Op 3, meaning Op 3's output can physically occupy the same memory addresses as Tensor A. This global visibility is the foundation for all subsequent SRAM optimizations.
+
+# Slide 10 — What the Operator Generator Emits
+
+* Specific kernel per layer
+* `depthwise_kernel3x3_stride1_inplace.c`
+* Compile-time specialization
+* No runtime branching on params
+* Constants inlined into kernels
+
+Speaker notes: If your model has five different depthwise convolutions, the generator might emit five slightly different kernel files. For example, a 3x3 stride-1 kernel is a completely different piece of source code than a 3x3 stride-2 kernel. By removing runtime checks for these parameters, we reduce the instruction footprint and allow the M7's pipeline to stay full.
+
+# Slide 11 — Side-by-Side Execution
+
+```
+[TFLM]                     [TinyEngine]
+.tflite Model              genModel.c
+      |                          |
+MicroInterpreter <---+      invoke()
+      |              |           |
+AllOpsResolver ------+      Layer-specific C
+      |                          |
+Generic Kernels            Specialized Kernels
+
+```
+
+Speaker notes: In TFLM, your firmware contains the interpreter, the resolver, and the model data as a blob. In TinyEngine, the model *is* the code. The `invoke()` function is just a list of calls to specific, generated kernels. This removes the indirection of the interpreter and ensures that only the code actually required for your specific model is linked into the final binary.
+
+# Slide 12 — What This Buys and Costs
+
+* Buys: Lower latency, smaller SRAM, cross-op optimization
+* Buys: Smaller Flash for the "runtime" logic
+* Costs: Re-codegen/re-flash to change models
+* Costs: No dynamic model loading at runtime
+* A deliberate trade for performance
+
+Speaker notes: This is a classic engineering trade-off. We are trading flexibility for efficiency. If your product requires dropping a new `.tflite` file into a filesystem and running it without a firmware update, TinyEngine is the wrong tool. But if you are shipping a fixed "Person Detect" or "Glass Break" model and need to shave 100ms off the latency, this is how you do it.
+
+# Slide 13 — Global Memory Scheduling
+
+* Uses full-graph lifetime knowledge
+* Packs activations like registers
+* Tensors with non-overlapping lifetimes share space
+* 50–70% SRAM reduction vs. TFLM
+
+```
+T1: [=====]
+T2:       [===]
+T3:           [=====]
+(T1 and T3 share buffer)
+
+```
+
+Speaker notes: Because we have a static schedule, we can solve the 2D packing problem for memory at compile time. We treat the activation arena like a register bank, where we reuse physical memory addresses as soon as the previous tenant tensor is no longer needed. This global approach is significantly more efficient than TFLM's greedy allocator, which often leaves gaps or misses reuse opportunities.
+
+# Slide 14 — In-place Depthwise Convolution
+
+* DW 3x3 Stride 1: locally bounded
+* Reads small neighborhood, writes 1 output
+* Write back to input buffer directly
+* Saves one full activation tensor per layer
+* `_inplace_CHW_fpreq.c` suffix
+
+Speaker notes: Depthwise convolution is unique because each output pixel only depends on a small spatial neighborhood of a single input channel. By carefully ordering the computation, we can write the output pixel back into the input buffer as we go. In MobileNet-style bottlenecks, this effectively eliminates the memory footprint of every other activation layer, which is a massive win for SRAM-constrained parts.
+
+# Slide 15 — Patch-based Inference
+
+* Break large input into spatial patches
+* Run patch through several layers top-to-bottom
+* Only materialize small patch activations
+* Enables 320x320 inputs on small MCUs
+* Tradeoff: Slight recomputation at patch edges
+
+Speaker notes: Standard inference is layer-by-layer; we finish all of Layer 1 before starting Layer 2. Patch-based inference goes depth-first. We compute a small spatial patch of the first few layers, producing a result for that region, and then move to the next patch. This allows us to handle high-resolution inputs because we never have to hold the entire 320x320 feature map in memory at once.
+
+# Slide 16 — Layer Fusion
+
+* Conv + BN + ReLU + Add fusion
+* Single pass over data in cache
+* Reduces memory traffic to SRAM
+* Fuses pre-quantization sequence
+* Smaller i-cache footprint
+
+Speaker notes: In TFLM, you often see Conv and Activation fused, but TinyEngine goes further by fusing Batch Normalization and residual Additions into the same kernel loop. This minimizes the number of times we read and write to SRAM. On an M7, where memory bandwidth to the AXIM interface can be a bottleneck, reducing these round-trips provides a measurable latency boost.
+
+# Slide 17 — Static Scheduling and Specialized Kernels
+
+* No virtual dispatch or function pointers
+* Compiler sees concrete loop bounds
+* Better unrolling and vectorization
+* Zero runtime shape/stride checks
+* Cleanly optimized for CMSIS-NN primitives
+
+Speaker notes: When the compiler knows that a loop will run exactly 128 times, it can unroll it much more effectively than if the loop bound is a variable passed in at runtime. By specializing every kernel for the specific tensor shapes of your model, we enable the ARM compiler to generate extremely tight assembly that utilizes the DSP instructions of the Cortex-M core to their fullest.
+
+# Slide 18 — Quantization Plumbing
+
+* int8 weights with per-channel scales
+* int8 activations with per-tensor scales
+* Fixed-point requantization (`_fpreq`)
+* No runtime table lookups for scales
+* Constants inlined at codegen time
+
+Speaker notes: TinyEngine uses the same int8 quantization scheme as TFLM, ensuring numerical compatibility. However, it inlines the requantization multipliers and shifts directly into the kernel source code. This avoids the runtime overhead of looking up these values in a table or calculating them during dispatch, further streamlining the inner loop of every convolution.
+
+# Slide 19 — A 4-layer Toy Graph
+
+```
+Conv1(T1) -> DWConv2(T2) -> PWConv3(T3) -> Conv4(T4)
+
+```
+
+| Tensor | Born | Dies | Size |
+| --- | --- | --- | --- |
+| T1 | L1 | L2 | 32 KB |
+| T2 | L2 | L3 | 32 KB |
+| T3 | L3 | L4 | 16 KB |
+| T4 | L4 | end | 8 KB |
+
+Speaker notes: Consider this simple four-layer sequence. We have four tensors, T1 through T4, with their respective sizes and lifetimes. In a traditional system, we might just look at what's live at any given moment. Let's see how the different allocation strategies handle this in the next slide.
+
+# Slide 20 — Greedy vs. Global Allocation
+
+* Greedy: Max live = T1+T2 = 64 KB
+* Global: Reuses T1 for T3 (L3-L4)
+* Peak SRAM drops to 40 KB
+* 37% memory saving on toy example
+* No change to model or accuracy
+
+Speaker notes: The greedy allocator sees T1 and T2 live together and allocates 64KB. TinyEngine's global scheduler sees that T1 dies at L2 and T3 isn't born until L3. Therefore, T3 can simply reuse the memory previously occupied by T1. This isn't just "arena" management; it's precise address-level scheduling that significantly lowers the peak memory floor.
+
+# Slide 21 — What the Generator Drops on Disk
+
+* `genModel.h`: PEAK_MEM, MODEL_SIZE
+* `genModel.c`: invoke() sequence
+* `weights.c`: const int8_t arrays
+* `depthwise_kernel*.c`: specialized DW
+* `convolve_*.c`: specialized PW/Standard
+* `pooling_*.c`, `fc_*.c`
+
+Speaker notes: After running the generator, you get a folder of standard C files. There are no proprietary blobs or complicated libraries. You get the weight arrays, the specialized kernel implementations, and the main model execution file. This makes it very easy to integrate into existing build systems like CMake or vendor IDEs.
+
+# Slide 22 — invoke() in Practice
+
+```c
+void invoke(void) {
+    layer1_conv2d_int8();
+    layer2_depthwise_kernel3x3_stride1_inplace();
+    layer3_conv1x1_int8();
+    /* ... one call per layer ... */
+}
+
+```
+
+* No loops or dispatch tables
+* Fully unrolled execution
+* Better static analysis / WCET behavior
+* Debuggable with standard breakpoints
+
+Speaker notes: The `invoke()` function is the definition of straight-line code. There is no hidden logic; it is simply a choreographed sequence of kernel calls. This structure is a dream for safety-critical or real-time developers because the worst-case execution time is much easier to bound, and the call stack is predictable and shallow.
+
+# Slide 23 — Mapping Layers to Memory
+
+* Weights -> Flash (.rodata)
+* Activations -> SRAM / DTCM
+* Input/Output -> SRAM
+* Scratch -> Reused Activation Arena
+* DTCM placement is key for M7 latency
+
+Speaker notes: To get the best performance on a Cortex-M7, you want your activations in DTCM. TinyEngine makes this easy because it gives you the exact size of the peak activation arena. You can then use linker scripts or `__attribute__((section(".dtcm")))` to place that specific buffer in the fastest possible memory, while keeping weights in the larger, slower Flash.
+
+# Slide 24 — End-to-end Pipeline
+
+```
+Train (PyTorch/TF)
+|
+v Post-Training Quantization
+|
+v .tflite Model
+|
+v TinyEngine Codegen
+|
+v C Sources -> Embedded IDE -> Flash
+
+```
+
+Speaker notes: The training and quantization steps are exactly what you already do for TFLM. The workflow only diverges at the final step. Instead of including the TFLM library and a FlatBuffer header, you run the TinyEngine generator and add the resulting C files to your project. Everything else in your toolchain remains the same.
+
+# Slide 25 — What You Actually Link In
+
+* `genModel.c` and `weights.c`
+* Only the kernels used by your network
+* CMSIS-Core / CMSIS-DSP
+* No TFLM or FlatBuffers libraries
+* Minimal runtime footprint
+
+Speaker notes: Your final binary size is significantly smaller because you aren't linking in an entire interpreter and a library of 100+ operators. You only link the specific versions of the kernels your model actually calls. If you don't use a MaxPool layer, no MaxPool code is ever compiled or linked into your project.
+
+# Slide 26 — Application Integration
+
+```c
+int main(void) {
+    system_init();
+    while (1) {
+        acquire_frame(getInput());
+        invoke();
+        consume_logits(getOutput());
+    }
+}
+
+```
+
+* Just a function call
+* Bare-metal, FreeRTOS, Zephyr ready
+* Predictable stack usage
+
+Speaker notes: Integration is trivial. You call your HAL to get data into the input buffer, call `invoke()`, and then read the results from the output buffer. Because `invoke()` is synchronous and has no internal heap allocation, it behaves perfectly in RTOS tasks or simple bare-metal super-loops.
+
+# Slide 27 — TFLM vs. TinyEngine, Head-to-Head
+
+| Aspect | TFLM | TinyEngine |
+| --- | --- | --- |
+| Model | Interpreter | Generated C |
+| Dispatch | Resolver Table | Direct Call |
+| Memory | Greedy | Global Schedule |
+| In-place DW | No | Yes |
+| Patch-based | No | Yes |
+| Peak SRAM | High | Low |
+| Latency | Baseline | Lower |
+| Op Coverage | Broad | Narrower |
+
+Speaker notes: This table summarizes the core differences. TinyEngine wins on memory and latency by narrowing its focus to specific network topologies, while TFLM provides a broad, flexible platform for a wide variety of models. If you are using MCUNet or MobileNet-style architectures, TinyEngine is almost always the superior choice for production.
+
+# Slide 28 — Case Study: VWW0 on PIC32CZ-CA
+
+* Hardware: Microchip PIC32CZ-CA (M7)
+* Model: MCUNet-VWW0 (Person detect)
+* Input: 64x64x3 int8
+* Layers: 51
+* Kernels: 18 in-place DW variants
+* Evidence of heavy optimization
+
+Speaker notes: Let's look at a real-world deployment on a Microchip PIC32CZ. We took a standard Visual Wake Words model and ran it through TinyEngine. Note the kernel directory: it generated 18 different specialized versions of depthwise kernels to handle the various strides and configurations in this 51-layer model. This level of specialization is what drives the performance results.
+
+# Slide 29 — Results: VWW0 + TinyEngine
+
+| Metric | Old (YOLO) | New (VWW0+TE) |
+| --- | --- | --- |
+| Peak SRAM | 257 KB | 60 KB (-76%) |
+| Flash Weights | 190 KB | 399 KB (+109%) |
+| Latency | ~330 ms | <70 ms |
+| Layer Count | 70 | 51 |
+
+Speaker notes: We achieved a 76% reduction in peak SRAM activations. We traded some Flash space—since generated code and unrolled weights take more room than a compressed blob—for a massive win in SRAM and a 4-5x speedup in inference. This is the exact trade you want to make on a part like the PIC32CZ, where Flash is abundant but SRAM is at a premium.
+
+# Slide 30 — Honest Tradeoffs
+
+* Narrower op coverage than TFLM
+* Non-MCUNet nets may not generate
+* Model swap requires firmware update
+* Community/Tooling is smaller
+* Debugging generated kernels is harder
+
+Speaker notes: It's important to be realistic. TinyEngine is not a total replacement for TFLM. If your model uses exotic custom ops or you need to switch models on the fly without re-flashing, stay with TFLM. TinyEngine is a "performance-first" tool for when you have a locked-down model and a tight SRAM budget that TFLM simply cannot meet.
+
+# Slide 31 — Future Directions
+
+* MCUNetV2: Improved patch-based logic
+* MCUNetV3: On-device tiny training
+* Sparse update / Quantized backprop
+* Move toward generated edge-AI runtimes
+* Stabilizing model shapes
+
+Speaker notes: The field is moving toward these generated runtimes. As model architectures stabilize around specific primitives like MBConv, the benefit of having a generic interpreter decreases. Future versions of this work even include sparse on-device training, allowing for personalization at the edge without breaking the MCU's memory budget.
+
+# Slide 32 — Key Takeaways
+
+* TinyEngine is a code generator, not a runtime
+* Global memory scheduling is the main SRAM win
+* In-place DWConv + fusion compound the win
+* Patch-based inference unlocks larger inputs
+* Integration is simple "Generated C" drop-in
+
+Speaker notes: Remember: TinyEngine removes the interpreter, not the math. It uses its global knowledge of your graph to pack memory and specialize kernels in ways a generic runtime never could. For you as TFLM engineers, the transition is straightforward: you keep your training and quantization flow, but replace the interpreter with a cleaner, faster C output.
+
+# Slide 33 — Q&A
+
+* Questions?
+
+Speaker notes: I expect some of you are wondering about how we debug those 18 kernel variants, or how to handle models that have layers TinyEngine doesn't yet support. Let's talk about the specific models you are currently shipping and where TinyEngine might—or might not—fit into your current TFLM-based product roadmap.
