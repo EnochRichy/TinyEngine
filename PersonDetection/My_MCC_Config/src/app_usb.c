@@ -123,7 +123,7 @@ static void build_trailer(uint8_t *out)
         if (sq > 255) sq = 255;
         r[1] = (uint8_t)sq;
 
-        /* Transform model-space (96x96) box to camera-space (160x120) by
+        /* Transform model-space (128x96) box to camera-space (160x120) by
          * adding the crop offsets. Host then renders boxes directly on the
          * camera frame with no further offset math. */
         int16_t x0 = (int16_t)((int)tracks[t].box.x0 + (int)CROP_COL_OFFSET);

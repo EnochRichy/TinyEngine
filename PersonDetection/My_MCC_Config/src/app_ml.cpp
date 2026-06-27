@@ -1,18 +1,18 @@
 /*******************************************************************************
   Application ML Source File (TinyEngine MCUNet person-det + SORT-lite tracker)
 
-  YOLOv3-style person detector: 96x96x3 int8 input (rescaled from the
+  YOLOv3-style person detector: 128x96x3 int8 input (rescaled from the
   original 160x128 via TinyEngine InputResizer at codegen time), 3 anchor
   heads at strides 8/16/32, 1 class (person). Per-frame flow:
 
     1. Camera deposits a 160x120 RGB565 frame in panda_scaled_data[].
-    2. rgb565_to_modelinput_det() center-crops 96x96 from the camera frame
-       into TinyEngine's input buffer (getInput()).
+    2. rgb565_to_modelinput_det() center-crops 128x96 from the camera
+       frame into TinyEngine's input buffer (getInput()).
     3. invoke(NULL) runs the generated graph.
     4. The codegen-emitted det_post_procesing() reads the 3 head tensors at
        their fixed buffer0 offsets and calls yoloOutput.c's postprocessing()
        to decode anchors + NMS. Output: s_ret_box[0][0..n-1] in model-pixel
-       space (0..159 x 0..127). One class, so all boxes are in row 0.
+       space (0..127 x 0..95). One class, so all boxes are in row 0.
     5. APP_TRK_Update() greedy-IoU-associates boxes to existing tracks for
        stable IDs across frames.
 *******************************************************************************/
@@ -31,7 +31,6 @@
 
 extern "C" {
     #include "TinyEngine/include/genNN.h"
-    void print_layer_profile(void);   /* defined in genModel.c */
 }
 
 /* Cortex-M7 DWT cycle counter. Used here as a dedicated timing source
@@ -113,13 +112,6 @@ static void run_person_detection(void)
     //        n_raw, n_tracks, (unsigned long)s_inference_us);
 
     s_inference_count = (uint8_t)(s_inference_count + 1u);
-
-    /* Per-layer profile dump every 64 inferences (~13 s at 5 fps). Profile
-     * stabilizes after ~10 runs (cache warm). Remove this once profiling
-     * is done; see comment in genModel.c. */
-    if ((s_inference_count & 0x3Fu) == 0u) {
-        print_layer_profile();
-    }
 
     s_inference_complete = true;
 }

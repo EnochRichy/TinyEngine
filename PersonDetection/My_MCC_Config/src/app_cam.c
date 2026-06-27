@@ -355,12 +355,12 @@ void ov7670_init(void)
 
 
 /* ----------------------------------------------------------------------------
- * rgb565_to_modelinput_det - 160x120 RGB565 -> 96x96 RGB int8 (HWC), centered
+ * rgb565_to_modelinput_det - 160x120 RGB565 -> 128x96 RGB int8 (HWC), centered
  *
  * Source : panda_scaled_data, FRAME_BYTES = 160*120*2 little-endian RGB565.
- * Dest   : TinyEngine input buffer (getInput()), MODEL_IN_BYTES = 96*96*3.
+ * Dest   : TinyEngine input buffer (getInput()), MODEL_IN_BYTES = 128*96*3.
  *
- * Model expects 96x96 input (graph rescaled from the original 160x128 by
+ * Model expects 128x96 input (graph rescaled from the original 160x128 by
  * TinyEngine InputResizer at codegen time). Camera is 160x120, so we take a
  * centered 96x96 crop -- no rescale -- preserving pixel scale so the
  * (unchanged) anchor table still matches the apparent object sizes.
@@ -384,7 +384,7 @@ static inline void rgb565_unpack(uint16_t pixel,
 
 void rgb565_to_modelinput_det(const uint8_t *src, signed char *dst)
 {
-    /* Center-crop 96x96 from the 160x120 camera frame -- no letterbox,
+    /* Center-crop 128x96 from the 160x120 camera frame -- no letterbox,
      * no rescale. Camera coords (CROP_ROW_OFFSET+y, CROP_COL_OFFSET+x)
      * map to model coords (y, x). */
     signed char *out = dst;
