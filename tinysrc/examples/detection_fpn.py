@@ -25,8 +25,8 @@ from code_generator.TfliteConvertor import TfliteConvertor
 tflite_path = "./assets/detection.tflite"
 life_cycle_path = "./lifecycle.png"
 detection_conf = "./assets/detection_config.json"
-h = 96
-w = 96
+h = 128
+w = 160
 
 use_inplace = True
 schedule_image_path = life_cycle_path

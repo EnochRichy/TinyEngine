@@ -1,18 +1,19 @@
 /*******************************************************************************
   Application ML Source File (TinyEngine MCUNet person-det + SORT-lite tracker)
 
-  YOLOv3-style person detector: 128x96x3 int8 input (rescaled from the
-  original 160x128 via TinyEngine InputResizer at codegen time), 3 anchor
-  heads at strides 8/16/32, 1 class (person). Per-frame flow:
+  YOLOv3-style person detector: 160x128x3 int8 input (native detector
+  shape, no InputResizer rescale at codegen time), 3 anchor heads at
+  strides 8/16/32, 1 class (person). Per-frame flow:
 
     1. Camera deposits a 160x120 RGB565 frame in panda_scaled_data[].
-    2. rgb565_to_modelinput_det() center-crops 128x96 from the camera
-       frame into TinyEngine's input buffer (getInput()).
+    2. rgb565_to_modelinput_det() letterboxes the 160x120 camera frame
+       to 160x128 (4 zero rows top + 4 bottom) into TinyEngine's input
+       buffer (getInput()).
     3. invoke(NULL) runs the generated graph.
     4. The codegen-emitted det_post_procesing() reads the 3 head tensors at
        their fixed buffer0 offsets and calls yoloOutput.c's postprocessing()
        to decode anchors + NMS. Output: s_ret_box[0][0..n-1] in model-pixel
-       space (0..127 x 0..95). One class, so all boxes are in row 0.
+       space (0..159 x 0..127). One class, so all boxes are in row 0.
     5. APP_TRK_Update() greedy-IoU-associates boxes to existing tracks for
        stable IDs across frames.
 *******************************************************************************/
