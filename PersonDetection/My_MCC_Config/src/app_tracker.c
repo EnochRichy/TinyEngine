@@ -70,6 +70,53 @@ static inline float iou(const det_box *a, const det_box *b)
     return un > 0.f ? inter / un : 0.f;
 }
 
+/* Grow a box by fraction k on each side around its center (k=0.10 -> +10%).
+ * Used to widen a track's search region as miss_count rises so a person who
+ * keeps walking during a 1-2 frame detector gap still associates on resume. */
+static inline det_box inflate_box(const det_box *b, float k)
+{
+    float cx = (b->x0 + b->x1) * 0.5f;
+    float cy = (b->y0 + b->y1) * 0.5f;
+    float hw = (b->x1 - b->x0) * 0.5f * (1.0f + k);
+    float hh = (b->y1 - b->y0) * 0.5f * (1.0f + k);
+    det_box r;
+    r.x0 = cx - hw; r.y0 = cy - hh;
+    r.x1 = cx + hw; r.y1 = cy + hh;
+    r.score = b->score;
+    return r;
+}
+
+static inline float center_dist_sq(const det_box *a, const det_box *b)
+{
+    float dx = ((a->x0 + a->x1) - (b->x0 + b->x1)) * 0.5f;
+    float dy = ((a->y0 + a->y1) - (b->y0 + b->y1)) * 0.5f;
+    return dx * dx + dy * dy;
+}
+
+/* Mean of the four edge lengths -- crude but rotation-free size proxy used
+ * to scale the distance gate so a head-sized box and a torso-sized box get
+ * proportional tolerance. */
+static inline float box_size_avg(const det_box *a, const det_box *b)
+{
+    return 0.25f * ((a->x1 - a->x0) + (a->y1 - a->y0)
+                  + (b->x1 - b->x0) + (b->y1 - b->y0));
+}
+
+/* Adopt det as track t's new observation, age-reset, and re-evaluate the
+ * tripwire. Shared by both the IoU and center-distance association passes
+ * so they behave identically once a (track, det) pair has been picked. */
+static void apply_match(int t, const det_box *det_box_p)
+{
+    s_tracks[t].box        = *det_box_p;
+    s_tracks[t].miss_count = 0;
+
+    int     new_axis = box_axis_camera(&s_tracks[t].box);
+    int8_t  new_side = side_with_hold(new_axis, s_tracks[t].prev_side);
+    if (s_tracks[t].prev_side == -1 && new_side == +1) ++s_count_in;
+    else if (s_tracks[t].prev_side == +1 && new_side == -1) ++s_count_out;
+    s_tracks[t].prev_side = new_side;
+}
+
 void APP_TRK_Reset(void)
 {
     memset(s_tracks, 0, sizeof(s_tracks));
@@ -89,38 +136,61 @@ void APP_TRK_Update(const det_box *det, int n)
     if (n > 16) n = 16;
 
     /* 1. Greedy IoU matching: each pass pick the highest-IoU unused (track,det)
-     *    pair above the gate. O(T*D*min(T,D)) <= 8*16*8 = ~1k ops, negligible. */
+     *    pair above the gate. The track's box is inflated proportional to its
+     *    miss_count so a track that just survived a 1-2 frame blink still
+     *    matches a person who continued moving during the gap.
+     *    O(T*D*min(T,D)) <= 8*16*8 = ~1k ops, negligible. */
     for (;;) {
         float best = TRK_IOU_GATE;
         int   bt = -1, bd = -1;
         for (int t = 0; t < TRK_MAX_TRACKS; ++t) {
             if (!s_tracks[t].active || trk_used[t]) continue;
+            float   k  = TRK_MISS_INFLATE_PER * (float)s_tracks[t].miss_count;
+            det_box sb = (k > 0.0f) ? inflate_box(&s_tracks[t].box, k)
+                                    : s_tracks[t].box;
             for (int d = 0; d < n; ++d) {
                 if (det_used[d]) continue;
-                float v = iou(&s_tracks[t].box, &det[d]);
+                float v = iou(&sb, &det[d]);
                 if (v > best) { best = v; bt = t; bd = d; }
             }
         }
         if (bt < 0) break;
-        s_tracks[bt].box        = det[bd];     /* hard update, no smoothing */
-        s_tracks[bt].miss_count = 0;
-
-        /* Tripwire check: the box just moved, so re-evaluate which side of
-         * the line this track is on. A sign flip vs prev_side = one crossing.
-         * Only ±1 -> ∓1 counts; transitions involving 0 (unseeded) don't,
-         * but spawn() always seeds prev_side strictly so 0 shouldn't occur
-         * here in normal flow. */
-        int     new_axis = box_axis_camera(&s_tracks[bt].box);
-        int8_t  new_side = side_with_hold(new_axis, s_tracks[bt].prev_side);
-        if (s_tracks[bt].prev_side == -1 && new_side == +1) ++s_count_in;
-        else if (s_tracks[bt].prev_side == +1 && new_side == -1) ++s_count_out;
-        s_tracks[bt].prev_side = new_side;
-
+        apply_match(bt, &det[bd]);             /* hard update, no smoothing */
         trk_used[bt] = 1;
         det_used[bd] = 1;
     }
 
-    /* 2. Age unmatched active tracks, kill at the threshold. */
+    /* 2. Center-distance fallback: any track still unmatched after the IoU
+     *    pass can claim a leftover detection whose center is within
+     *    TRK_DIST_GATE_FRAC * avg_box_size * (1 + 0.15*miss_count). This is
+     *    the main defense against the detector blinking on/off near the
+     *    tripwire -- IoU collapses to 0 across the gap, but the centers
+     *    are still obviously the same target. Greedy by closest distance. */
+    for (;;) {
+        float best_slack = 0.0f;   /* thr^2 - d^2; larger = farther under gate */
+        int   bt = -1, bd = -1;
+        for (int t = 0; t < TRK_MAX_TRACKS; ++t) {
+            if (!s_tracks[t].active || trk_used[t]) continue;
+            float miss_scale = 1.0f + 0.15f * (float)s_tracks[t].miss_count;
+            for (int d = 0; d < n; ++d) {
+                if (det_used[d]) continue;
+                float size = box_size_avg(&s_tracks[t].box, &det[d]);
+                float thr  = TRK_DIST_GATE_FRAC * size * miss_scale;
+                float thr2 = thr * thr;
+                float d2   = center_dist_sq(&s_tracks[t].box, &det[d]);
+                if (d2 < thr2) {
+                    float slack = thr2 - d2;
+                    if (slack > best_slack) { best_slack = slack; bt = t; bd = d; }
+                }
+            }
+        }
+        if (bt < 0) break;
+        apply_match(bt, &det[bd]);
+        trk_used[bt] = 1;
+        det_used[bd] = 1;
+    }
+
+    /* 3. Age unmatched active tracks, kill at the threshold. */
     for (int t = 0; t < TRK_MAX_TRACKS; ++t) {
         if (!s_tracks[t].active || trk_used[t]) continue;
         if (++s_tracks[t].miss_count > TRK_MAX_MISSES) {
@@ -128,7 +198,7 @@ void APP_TRK_Update(const det_box *det, int n)
         }
     }
 
-    /* 3. Spawn new tracks for unmatched detections (drop if slots are full). */
+    /* 4. Spawn new tracks for unmatched detections (drop if slots are full). */
     for (int d = 0; d < n; ++d) {
         if (det_used[d]) continue;
         for (int t = 0; t < TRK_MAX_TRACKS; ++t) {

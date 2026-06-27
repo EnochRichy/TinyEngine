@@ -27,8 +27,23 @@ extern "C" {
 #include "TinyEngine/include/yoloOutput.h"   /* det_box */
 
 #define TRK_MAX_TRACKS  8
-#define TRK_MAX_MISSES  3        /* ~1 s at 3 FPS */
+#define TRK_MAX_MISSES  5        /* ~0.7 s at 7 FPS -- survives a brief detector blink */
 #define TRK_IOU_GATE    0.30f
+
+/* Association tolerance. After the IoU pass fails to claim a detection, a
+ * second pass matches by center distance: a detection whose center lies
+ * within TRK_DIST_GATE_FRAC * avg(box_size) * (1 + 0.15 * miss_count) of
+ * an unmatched track's last box is treated as the same person. This rescues
+ * a track when the detector blinks for one or two frames and the person
+ * keeps moving -- IoU collapses below the gate but the centers are still
+ * obviously the same target. Set TRK_DIST_GATE_FRAC <= 0 to disable.
+ *
+ * TRK_MISS_INFLATE_PER also expands the track's search box for the IoU
+ * pass by this fraction per missed frame (e.g. 0.10 -> +10% per miss on
+ * each side), so a fast-moving person who keeps going during a detector
+ * gap still associates on resume. */
+#define TRK_DIST_GATE_FRAC      0.60f
+#define TRK_MISS_INFLATE_PER    0.10f
 
 /* Tripwire line-crossing counter config. Coordinates are camera-space
  * (160x120). Change here and rebuild firmware + restart dashboard.
@@ -38,7 +53,7 @@ extern "C" {
  * [POS-DEADBAND, POS+DEADBAND] holds its previous side, so a person
  * jittering on the line cannot rack up phantom counts. */
 #define TRK_TRIPWIRE_VERTICAL   1
-#define TRK_TRIPWIRE_POS        80
+#define TRK_TRIPWIRE_POS        90
 #define TRK_TRIPWIRE_DEADBAND   3
 
 typedef struct {
