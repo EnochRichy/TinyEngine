@@ -303,18 +303,32 @@ def draw_tripwire(canvas_video, vertical, pos, deadband):
 
 
 def draw_counts_hud(canvas_video, count_in, count_out):
-    """Top-left HUD: IN / OUT / NET, sized to read at presentation distance."""
+    """Single-line top HUD: IN n | OUT n | NET n, each segment in its own colour."""
     net = count_in - count_out
-    lines = [
-        (f"IN  {count_in}",  (80, 220, 80)),
+    segments = [
+        (f"IN {count_in}",   (80, 220, 80)),
+        ("|",                (160, 160, 160)),
         (f"OUT {count_out}", (80, 80, 220)),
+        ("|",                (160, 160, 160)),
         (f"NET {net}",       (240, 240, 240)),
     ]
-    box_w, box_h = 86, 22 * len(lines) + 8
-    cv2.rectangle(canvas_video, (6, 6), (6 + box_w, 6 + box_h), (0, 0, 0), -1)
-    for i, (text, colour) in enumerate(lines):
-        cv2.putText(canvas_video, text, (12, 26 + i * 22),
-                    FONT, 0.6, colour, 2, cv2.LINE_AA)
+    scale, thickness, gap, pad = 0.5, 1, 6, 4
+    sizes = [cv2.getTextSize(t, FONT, scale, thickness)[0] for t, _ in segments]
+    total_w = sum(w for w, _ in sizes) + gap * (len(segments) - 1)
+    text_h  = max(h for _, h in sizes)
+    box_w, box_h = total_w + 2 * pad, text_h + 2 * pad
+    h, w = canvas_video.shape[:2]
+    x0, y0 = w - box_w - 6, h - box_h - 6
+    cv2.rectangle(canvas_video,
+                  (x0, y0),
+                  (x0 + total_w + 2 * pad, y0 + text_h + 2 * pad),
+                  (0, 0, 0), -1)
+    x = x0 + pad
+    base_y = y0 + pad + text_h
+    for (text, colour), (w, _) in zip(segments, sizes):
+        cv2.putText(canvas_video, text, (x, base_y),
+                    FONT, scale, colour, thickness, cv2.LINE_AA)
+        x += w + gap
 
 
 def draw_tracks(canvas_video, tracks):
