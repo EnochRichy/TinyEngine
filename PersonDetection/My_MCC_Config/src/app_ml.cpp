@@ -62,10 +62,16 @@ APP_ML_DATA app_mlData;
 extern APP_CAM_DATA app_camData;
 
 /* VALID_THRESHOLD is the per-anchor confidence floor applied before NMS.
- * 0.5 is the standard starting point; lower if recall is poor, raise if
- * the dashboard shows too many false positives. NMS threshold (0.45) is
- * hard-coded inside the codegen-generated det_post_procesing wrapper. */
-#define DET_VALID_THRESHOLD   0.5f
+ * Set deliberately low (0.30) as the *recall* threshold: every plausibly-
+ * person box passes through to the tracker. The tracker then enforces the
+ * stricter TRK_SPAWN_SCORE (0.50) when *creating* a new track, so low-
+ * confidence detections can only update existing tracks. This keeps a
+ * confirmed person alive through a 1-2 frame detector dip without letting
+ * background blobs at 0.30-0.50 spawn phantom tracks.
+ *
+ * NMS threshold (0.45) is hard-coded inside the codegen-generated
+ * det_post_procesing wrapper (genModel.c). */
+#define DET_VALID_THRESHOLD   0.30f
 
 /* Must match yoloOutput.c's internal #define MAX_NUM_CLASSES 4. The header
  * does not expose it, but postprocessing() writes into all 4 slots regardless
@@ -84,32 +90,64 @@ static det_box *s_ret_box[DET_MAX_NUM_CLASSES]   = {0};
  * Inference                                                                  *
  ******************************************************************************/
 
+/* Per-stage timing summary cadence. At ~7 FPS, 7 frames ~= 1 s -- one
+ * print per second of pipeline activity is enough headroom-watching for
+ * the demo, and any printf cost only lands every Nth frame. */
+#define APP_ML_STAGE_REPORT_FRAMES  7u
+
 static void run_person_detection(void)
 {
     s_inference_complete = false;
     app_camData.processed_frame_data_ready = false;
 
-    /* Step 1: camera frame -> TinyEngine input buffer (center-crop 160x120 -> 96x96). */
-    signed char *in = getInput();
-    rgb565_to_modelinput_det((const uint8_t*)APP_Cam_GetRGB565Frame(), in);
+    /* Per-stage cycle accumulators (preproc / invoke / postproc / tracker).
+     * Kept as raw cycles to avoid per-frame division; converted at report. */
+    static uint64_t acc_pp = 0, acc_iv = 0, acc_po = 0, acc_tr = 0;
+    static uint8_t  acc_frames = 0;
 
-    /* Step 2: run the generated graph + decode boxes (timed end-to-end). */
-    uint32_t c0 = DWT_CYCCNT;
+    /* Step 1: camera frame -> TinyEngine input buffer (center-crop 160x120 -> 128x96). */
+    signed char *in = getInput();
+    uint32_t c_pp0 = DWT_CYCCNT;
+    rgb565_to_modelinput_det((const uint8_t*)APP_Cam_GetRGB565Frame(), in);
+    uint32_t c_iv0 = DWT_CYCCNT;
+
+    /* Step 2: run the generated graph + decode boxes. Invoke and postproc
+     * are timed separately for the per-stage report, but s_inference_us
+     * remains (invoke + postproc) for trailer/dashboard compatibility. */
     invoke(NULL);
+    uint32_t c_po0 = DWT_CYCCNT;
     det_post_procesing(s_box_count, s_ret_box, DET_VALID_THRESHOLD);
-    uint32_t c1 = DWT_CYCCNT;
-    s_inference_us = (uint32_t)(((uint64_t)(c1 - c0) * 1000000ULL)
+    uint32_t c_tr0 = DWT_CYCCNT;
+    s_inference_us = (uint32_t)(((uint64_t)(c_tr0 - c_iv0) * 1000000ULL)
                                 / (uint64_t)CPU_CLOCK_HZ);
 
     /* Step 3: feed boxes through the tracker. person-det is single-class, so
      * all detections live in s_ret_box[0]. */
     int n_raw = s_box_count[0];
     APP_TRK_Update(s_ret_box[0], n_raw);
+    uint32_t c_tr1 = DWT_CYCCNT;
+
+    acc_pp += (uint64_t)(c_iv0 - c_pp0);
+    acc_iv += (uint64_t)(c_po0 - c_iv0);
+    acc_po += (uint64_t)(c_tr0 - c_po0);
+    acc_tr += (uint64_t)(c_tr1 - c_tr0);
+    if (++acc_frames >= APP_ML_STAGE_REPORT_FRAMES) {
+        const uint64_t denom = (uint64_t)CPU_CLOCK_HZ * (uint64_t)acc_frames;
+        uint32_t pp = (uint32_t)((acc_pp * 1000000ULL) / denom);
+        uint32_t iv = (uint32_t)((acc_iv * 1000000ULL) / denom);
+        uint32_t po = (uint32_t)((acc_po * 1000000ULL) / denom);
+        uint32_t tr = (uint32_t)((acc_tr * 1000000ULL) / denom);
+        printf("stage us avg/%uf: pp=%lu inv=%lu post=%lu trk=%lu sum=%lu\r\n",
+               (unsigned)acc_frames,
+               (unsigned long)pp, (unsigned long)iv,
+               (unsigned long)po, (unsigned long)tr,
+               (unsigned long)(pp + iv + po + tr));
+        acc_pp = acc_iv = acc_po = acc_tr = 0;
+        acc_frames = 0;
+    }
 
     int n_tracks = 0;
     (void)APP_TRK_GetTracks(&n_tracks);
-    // printf("Boxes: raw=%d tracks=%d  inf=%lu us\r\n",
-    //        n_raw, n_tracks, (unsigned long)s_inference_us);
 
     s_inference_count = (uint8_t)(s_inference_count + 1u);
 
