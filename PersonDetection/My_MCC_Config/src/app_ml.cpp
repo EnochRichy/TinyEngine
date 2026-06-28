@@ -137,12 +137,28 @@ void APP_ML_Tasks(void)
             break;
 
         case APP_ML_STATE_SERVICE_TASKS:
+        {
+            /* SW0 (PB24, active-LOW with internal pull-up) resets the
+             * tripwire IN/OUT counts and the live track table. Latch on
+             * the first LOW sample; re-arm only after the button is
+             * released (pin returns HIGH). The press-then-release gate
+             * is sufficient debounce — any bounce while pressed lands on
+             * the already-disarmed state and is ignored. */
+            static bool sw0_armed = true;
+            if (sw0_armed && SWITCH0_Get() == 0U) {
+                APP_TRK_Reset();
+                sw0_armed = false;
+            } else if (!sw0_armed && SWITCH0_Get() != 0U) {
+                sw0_armed = true;
+            }
+
             if (app_camData.processed_frame_data_ready) {
                 TEST_PIN_Set();
                 run_person_detection();
                 TEST_PIN_Clear();
             }
             break;
+        }
 
         case APP_ML_STATE_SMOKE_TEST:
             APP_ML_RunSmokeTest();

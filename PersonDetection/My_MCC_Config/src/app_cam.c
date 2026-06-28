@@ -218,20 +218,12 @@ void I2C_Read(uint8_t reg_addr)
  */
 void ov7670_init(void)
 {
-   /* Reset OV7670 via GPIO. XCLK must be running (TCC7 started in
-    * APP_CAM_STATE_INIT before ov7670_init() is called) and RESET held LOW
-    * for >=1 ms; then deassert and wait >=30 ms before any SCCB write — the
-    * sensor's internal logic needs that many XCLK cycles to come up cleanly.
-    * Earlier the reset pulse was a few-hundred-microsecond busy-wait, which
-    * sometimes left registers half-latched and produced byte-misaligned DMA
-    * output on the first frame. */
-  SYS_TIME_HANDLE rstDelayHandle;
+   /* Reset OV7670 via GPIO */
   RST_OV_Clear();
-  SYS_TIME_DelayMS(10, &rstDelayHandle);
-  while(!SYS_TIME_DelayIsComplete(rstDelayHandle));
+  for(int delay_count = 0; delay_count < I2C_WRITE_DELAY_LOOPS; delay_count++);
+  for(int delay_count = 0; delay_count < I2C_WRITE_DELAY_LOOPS; delay_count++);
+  for(int delay_count = 0; delay_count < I2C_WRITE_DELAY_LOOPS; delay_count++);
   RST_OV_Set();
-  SYS_TIME_DelayMS(100, &rstDelayHandle);
-  while(!SYS_TIME_DelayIsComplete(rstDelayHandle));
 
    /* Hardware reset via I2C */
    I2C_Write(0x12, 0x80);
