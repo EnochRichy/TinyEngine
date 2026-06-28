@@ -218,12 +218,20 @@ void I2C_Read(uint8_t reg_addr)
  */
 void ov7670_init(void)
 {
-   /* Reset OV7670 via GPIO */
+   /* Reset OV7670 via GPIO. XCLK must be running (TCC7 started in
+    * APP_CAM_STATE_INIT before ov7670_init() is called) and RESET held LOW
+    * for >=1 ms; then deassert and wait >=30 ms before any SCCB write — the
+    * sensor's internal logic needs that many XCLK cycles to come up cleanly.
+    * Earlier the reset pulse was a few-hundred-microsecond busy-wait, which
+    * sometimes left registers half-latched and produced byte-misaligned DMA
+    * output on the first frame. */
+  SYS_TIME_HANDLE rstDelayHandle;
   RST_OV_Clear();
-  for(int delay_count = 0; delay_count < I2C_WRITE_DELAY_LOOPS; delay_count++);
-  for(int delay_count = 0; delay_count < I2C_WRITE_DELAY_LOOPS; delay_count++);
-  for(int delay_count = 0; delay_count < I2C_WRITE_DELAY_LOOPS; delay_count++);
+  SYS_TIME_DelayMS(10, &rstDelayHandle);
+  while(!SYS_TIME_DelayIsComplete(rstDelayHandle));
   RST_OV_Set();
+  SYS_TIME_DelayMS(100, &rstDelayHandle);
+  while(!SYS_TIME_DelayIsComplete(rstDelayHandle));
 
    /* Hardware reset via I2C */
    I2C_Write(0x12, 0x80);
@@ -481,6 +489,51 @@ void APP_CAM_Tasks ( void )
             /* Register DMA completion callback for frame capture */
             DMA_ChannelCallbackRegister(DMA_CHANNEL_1, DMA_EventHandler, 0);
 
+            /* Arm the FIRST DMA transfer inside a known vertical-blank window
+             * so DMA byte-alignment is deterministic.
+             *
+             * DMA channel 1 is triggered by PCLK falling-edge events from EIC
+             * EXTINT7 (see plib_dma / plib_eic config). PCLK is gated to
+             * active pixels by the OV7670 scaler config, so during vertical
+             * blank no events arrive — that is our only window to arm the
+             * channel without losing the first byte of the next frame.
+             *
+             * The OV7670 QVGA vertical blank is roughly 1 ms wide — about
+             * the same as the SYS_TIME tick period. Any ISR that fires
+             * between observing the VSYNC edge and finishing the DMA arm
+             * can push the arming past the end of VBLANK, losing the first
+             * PCLK event of the next frame and shifting the entire frame by
+             * one byte. We disable IRQs across the WHOLE detect+arm sequence
+             * (not just the register writes) so it is atomic with respect to
+             * VBLANK.
+             *
+             * OV7670 default polarity: VSYNC HIGH = vertical blank, LOW =
+             * active frame. */
+            {
+                const uint32_t VSYNC_TIMEOUT = 4000000U;
+                uint32_t spin;
+
+                __DSB();
+
+                /* Step 1: wait for VSYNC LOW (active frame). */
+                for (spin = 0; spin < VSYNC_TIMEOUT && VSYNC_Get(); ++spin) { }
+                /* Step 2: wait for VSYNC LOW->HIGH (start of VBLANK). */
+                for (spin = 0; spin < VSYNC_TIMEOUT && !VSYNC_Get(); ++spin) { }
+
+                /* Arm immediately, with the rising edge fresh — VBLANK has
+                 * just begun, giving us the maximum margin (~1 ms) before
+                 * the first PCLK of the next frame arrives. */
+                DMA_ChannelDisable(DMA_CHANNEL_1);
+                DMA_ChannelTransfer(DMA_CHANNEL_1,
+                                    (const void *)((const uint8_t *)&PORT_REGS->GROUP[2].PORT_IN + 1),
+                                    &panda_scaled_data[0],
+                                    FRAME_BYTES);
+                app_camData.line_index = 0;
+
+                __DSB();
+                __ISB();
+            }
+
             /* Register external interrupt handlers for HSYNC/VSYNC line/frame sync */
             EIC_CallbackRegister(EIC_PIN_1, (EIC_CALLBACK)VSYNC_ISR, 0);
             EIC_CallbackRegister(EIC_PIN_2, (EIC_CALLBACK)HSYNC_ISR, 0);
@@ -495,10 +548,21 @@ void APP_CAM_Tasks ( void )
 
         case APP_CAM_STATE_SERVICE_TASKS:
         {
+            /* Discard the first few frames after init: AGC/AWB is still
+             * converging and the very first capture may straddle the moment
+             * EIC took over re-arming, so its content is not trustworthy. */
+            static uint8_t frames_to_skip = 3;
 
             if (app_camData.frame_ready)
             {
                 app_camData.frame_ready = false;
+
+                if (frames_to_skip > 0)
+                {
+                    --frames_to_skip;
+                    break;
+                }
+
                 /* Cache-clean the DMA'd frame so the CPU (ML preprocessor and
                  * USB endpoint write) sees fresh pixels, then signal the ML
                  * task that a new frame is available. */
